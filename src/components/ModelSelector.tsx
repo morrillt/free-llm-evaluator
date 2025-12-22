@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Model } from '@/lib/types';
 import { Button } from './ui/Button';
 import { Check, Filter, ExternalLink } from 'lucide-react';
+import posthog from 'posthog-js';
 
 interface ModelSelectorProps {
   models: Model[];
@@ -64,11 +65,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   }, [filteredModels]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+    <div className="flex flex-col h-full space-y-6 overflow-hidden">
+      <div className="flex-shrink-0 flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
         <div>
           <h2 className="text-3xl font-bold text-mocha-text mb-2">Select Models</h2>
-          <p className="text-mocha-subtext1">Choose up to 5 free models to evaluate and compare.</p>
+          <p className="text-mocha-subtext1">Choose up to 7 free models to evaluate and compare.</p>
         </div>
         
         {/* Filters */}
@@ -101,14 +102,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center justify-between pb-2 border-b border-mocha-surface1">
+      <div className="flex-shrink-0 flex items-center justify-between pb-2 border-b border-mocha-surface1">
         <h3 className="text-lg font-semibold text-mocha-lavender">Available Models</h3>
         <span className="text-sm text-mocha-subtext0 font-medium">
-          {selectedModelIds.length} / 5 selected
+          {selectedModelIds.length} / 7 selected
         </span>
       </div>
 
-      <div className="space-y-8">
+      <div className="flex-1 overflow-auto space-y-8 min-h-0 pr-2">
         {groupedModels.map(([provider, providerModels]) => (
           <div key={provider} className="space-y-3">
             <h3 className="text-sm font-bold text-mocha-overlay2 uppercase tracking-wider flex items-center gap-2">
@@ -118,7 +119,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {providerModels.map((model) => {
                 const isSelected = selectedModelIds.includes(model.id);
-                const isDisabled = !isSelected && selectedModelIds.length >= 5;
+                const isDisabled = !isSelected && selectedModelIds.length >= 7;
 
                 return (
                   <div
@@ -130,7 +131,26 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                         : 'border-mocha-surface1 bg-mocha-mantle hover:border-mocha-overlay0',
                       isDisabled && 'opacity-50 cursor-not-allowed'
                     )}
-                    onClick={() => !isDisabled && onToggleModel(model.id)}
+                    onClick={() => {
+                      if (isDisabled) return;
+                      // Track model selection/deselection with PostHog
+                      if (isSelected) {
+                        posthog.capture('model_deselected', {
+                          model_id: model.id,
+                          model_name: model.name,
+                          provider: provider,
+                          current_selection_count: selectedModelIds.length - 1,
+                        });
+                      } else {
+                        posthog.capture('model_selected', {
+                          model_id: model.id,
+                          model_name: model.name,
+                          provider: provider,
+                          current_selection_count: selectedModelIds.length + 1,
+                        });
+                      }
+                      onToggleModel(model.id);
+                    }}
                   >
                     <a
                       href={`https://openrouter.ai/models/${model.id}`}
@@ -193,3 +213,5 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(' ');
 }
+
+

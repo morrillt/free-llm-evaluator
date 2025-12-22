@@ -14,6 +14,7 @@ export interface Settings {
   globalTemperature: number;
   globalThinkingEnabled: boolean;
   globalThinkingBudget: number;
+  jokeSystemPrompt?: string;
   modelOverrides: Record<string, ModelOverride>;
 }
 
@@ -41,10 +42,30 @@ export interface ModelResponse {
   content: string;
   thinkingContent?: string;
   duration: number; // in ms
+  ttft?: number; // Time to first token in ms
   thinkingDuration?: number; // in ms
   tps: number;
   tokenCount: number;
   thinkingTokenCount?: number;
   error?: string;
   rawResponse?: any;
+  rating?: 'funny' | 'not_funny';
 }
+
+export interface JokeComment {
+  id: string;
+  text: string;
+  timestamp: string;
+  author: string;
+}
+
+export interface Joke {
+  id: string;
+  content: string;
+  modelSignature: string;
+  timestamp: string;
+  comments: JokeComment[];
+  score: number;
+}
+
+

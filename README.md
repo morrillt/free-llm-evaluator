@@ -1,4 +1,4 @@
-# Free LLM Evaluator
+# freellmfunny
 
 A standalone Next.js application designed to evaluate and compare multiple free LLM models available via [OpenRouter](https://openrouter.ai/). 
 

@@ -1,13 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Model, Settings } from '@/lib/types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Model, Settings, Conversation, ModelOverride } from '@/lib/types';
 import { ModelSelector } from './ModelSelector';
 import { SettingsPanel } from './SettingsPanel';
 import { ChatInterface } from './ChatInterface';
+import { JokeInterface } from './JokeInterface';
+import { FunnyIndex } from './FunnyIndex';
+import { JokeWall } from './JokeWall';
+import { JokeSidebar } from './JokeSidebar';
 import { Button } from './ui/Button';
-import { Settings as SettingsIcon, LayoutGrid, MessageSquare, Zap, ArrowRight, Github, Play, HelpCircle, X } from 'lucide-react';
-import { saveSettingsAction } from '@/app/actions';
+import { Settings as SettingsIcon, LayoutGrid, MessageSquare, Zap, ArrowRight, Github, Play, HelpCircle, X, Laugh, Trophy } from 'lucide-react';
+import { saveSettingsAction, getConversationsAction, recordVisitAction } from '@/app/actions';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { Users } from 'lucide-react';
 
 interface ClientAppProps {
   initialModels: Model[];
@@ -16,25 +22,38 @@ interface ClientAppProps {
 
 const VideoModal = ({ isOpen, onClose, title }: { isOpen: boolean; onClose: () => void; title: string }) => {
   if (!isOpen) return null;
+  const videoUrl = process.env.NEXT_PUBLIC_VIDEO_URL || "https://www.youtube.com/embed/dQw4w9WgXcQ";
+  const autoplayUrl = videoUrl.includes('?') ? `${videoUrl}&autoplay=1&mute=1` : `${videoUrl}?autoplay=1&mute=1`;
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-      <div className="relative w-full max-w-4xl aspect-video bg-mocha-crust rounded-2xl overflow-hidden border border-mocha-surface1 shadow-2xl">
-        <button 
-          onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 bg-mocha-surface0 hover:bg-mocha-surface1 text-mocha-text rounded-full transition-colors"
-        >
-          <X className="w-6 h-6" />
-        </button>
-        <div className="absolute top-4 left-6 text-mocha-lavender font-bold text-lg pointer-events-none">
-          {title}
+      <div className="relative w-full max-w-5xl bg-mocha-crust rounded-2xl overflow-hidden border border-mocha-surface1 shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-8 py-6 bg-mocha-mantle border-b border-mocha-surface1">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-mocha-lavender font-black text-4xl uppercase tracking-tighter">
+              {title}
+            </h3>
+            <p className="text-mocha-yellow text-xl font-bold animate-pulse flex items-center gap-2">
+              <span>meanwhile pls enjoy a song and dance.</span>
+              <span className="text-sm opacity-50 font-normal">(sorry, will add real video tomorrow :)</span>
+            </p>
+          </div>
+          <button 
+            onClick={onClose}
+            className="p-3 bg-mocha-surface0 hover:bg-mocha-surface1 text-mocha-text rounded-full transition-colors shadow-lg"
+          >
+            <X className="w-8 h-8" />
+          </button>
         </div>
-        <iframe
-          className="w-full h-full"
-          src={process.env.NEXT_PUBLIC_VIDEO_URL || "https://www.youtube.com/embed/dQw4w9WgXcQ"}
-          title="YouTube video player"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-        />
+        <div className="aspect-video w-full bg-black">
+          <iframe
+            className="w-full h-full"
+            src={autoplayUrl}
+            title="YouTube video player"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
       </div>
     </div>
   );
@@ -44,21 +63,146 @@ export const ClientApp: React.FC<ClientAppProps> = ({
   initialModels,
   initialSettings,
 }) => {
-  const [view, setView] = useState<'models' | 'chat'>('models');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
+  const [view, setView] = useState<'models' | 'chat' | 'joke' | 'funny_index'>('models');
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [videoModal, setVideoModal] = useState<{ isOpen: boolean; title: string }>({ isOpen: false, title: '' });
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [visitorCount, setVisitorCount] = useState<number>(0);
+
+  // Record visit and get count
+  useEffect(() => {
+    const recordVisit = async () => {
+      const count = await recordVisitAction();
+      setVisitorCount(count);
+    };
+    recordVisit();
+  }, []);
+
+  // Helper to encode thinking params: modelId1:budget1,modelId2:budget2
+  const encodeThinkingParams = (overrides: Record<string, ModelOverride>) => {
+    return Object.entries(overrides)
+      .filter(([_, ov]) => ov.thinkingBudget !== undefined)
+      .map(([id, ov]) => `${id}:${ov.thinkingBudget}`)
+      .join(',');
+  };
+
+  // Helper to decode thinking params
+  const decodeThinkingParams = (param: string | null): Record<string, ModelOverride> => {
+    if (!param) return {};
+    const overrides: Record<string, ModelOverride> = {};
+    param.split(',').forEach(part => {
+      const lastColonIndex = part.lastIndexOf(':');
+      if (lastColonIndex !== -1) {
+        const id = part.substring(0, lastColonIndex);
+        const budget = part.substring(lastColonIndex + 1);
+        if (id && budget) {
+          overrides[id] = {
+            thinkingEnabled: true,
+            thinkingBudget: parseInt(budget, 10)
+          };
+        }
+      }
+    });
+    return overrides;
+  };
+
+  // Initialize state from URL
+  useEffect(() => {
+    const r = searchParams.get('route') as any;
+    const m = searchParams.get('models');
+    const t = searchParams.get('thinking');
+    const j = searchParams.get('joke');
+
+    let updatedSettings = { ...settings };
+    let needsUpdate = false;
+
+    if (r && ['models', 'chat', 'joke', 'funny_index'].includes(r)) {
+      setView(r);
+    }
+
+    if (m) {
+      updatedSettings.selectedModels = m.split(',');
+      needsUpdate = true;
+    }
+
+    if (t) {
+      const overrides = decodeThinkingParams(t);
+      updatedSettings.modelOverrides = { ...updatedSettings.modelOverrides, ...overrides };
+      needsUpdate = true;
+    }
+
+    if (j) {
+      updatedSettings.jokeSystemPrompt = j;
+      needsUpdate = true;
+    }
+
+    if (needsUpdate) {
+      setSettings(updatedSettings);
+    }
+    
+    setIsInitialized(true);
+  }, []); // Only on mount
+
+  // Sync state to URL
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const params = new URLSearchParams();
+    if (view !== 'models') params.set('route', view);
+    if (settings.selectedModels.length > 0) params.set('models', settings.selectedModels.join(','));
+    
+    const thinkingStr = encodeThinkingParams(settings.modelOverrides);
+    if (thinkingStr) params.set('thinking', thinkingStr);
+    
+    if (settings.jokeSystemPrompt) params.set('joke', settings.jokeSystemPrompt);
+
+    const queryString = params.toString();
+    const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
+    
+    // Use window.history.replaceState to avoid adding to history on every state change
+    window.history.replaceState(null, '', newUrl);
+  }, [view, settings, pathname, isInitialized]);
+
+  useEffect(() => {
+    const fetchConversations = async () => {
+      const convs = await getConversationsAction();
+      setConversations(convs);
+    };
+    if (view === 'funny_index') {
+      fetchConversations();
+    }
+  }, [view]);
 
   const handleToggleModel = async (modelId: string) => {
     const newSelected = settings.selectedModels.includes(modelId)
       ? settings.selectedModels.filter((id) => id !== modelId)
       : [...settings.selectedModels, modelId];
     
-    if (newSelected.length > 5) return;
+    if (newSelected.length > 7) return;
 
     const newSettings = { ...settings, selectedModels: newSelected };
     setSettings(newSettings);
     await saveSettingsAction(newSettings);
+  };
+
+  const handleRandomizeModel = async (oldModelId: string) => {
+    const unselectedModels = initialModels.filter(m => !settings.selectedModels.includes(m.id));
+    if (unselectedModels.length === 0) return null;
+
+    const randomIndex = Math.floor(Math.random() * unselectedModels.length);
+    const newModelId = unselectedModels[randomIndex].id;
+
+    const newSelected = settings.selectedModels.map(id => id === oldModelId ? newModelId : id);
+    const newSettings = { ...settings, selectedModels: newSelected };
+    setSettings(newSettings);
+    await saveSettingsAction(newSettings);
+    return newModelId;
   };
 
   const handleUpdateSettings = async (newSettings: Settings) => {
@@ -66,21 +210,70 @@ export const ClientApp: React.FC<ClientAppProps> = ({
     await saveSettingsAction(newSettings);
   };
 
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-screen overflow-hidden">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 bg-mocha-mantle border-b border-mocha-surface1">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-mocha-blue rounded-lg flex items-center justify-center">
-              <Zap className="w-5 h-5 text-mocha-base fill-current" />
+            <div className="w-10 h-10 rounded-full border-2 border-mocha-blue overflow-hidden flex-shrink-0">
+              <img src="/logo.png" alt="freellmfunny logo" className="w-full h-full object-cover" />
             </div>
-            <h1 className="text-xl font-bold text-mocha-text tracking-tight">
-              Free LLM <span className="text-mocha-blue">Evaluator</span>
+            <h1 className="text-xl font-black text-mocha-text tracking-tight uppercase">
+              freellm<span className="text-mocha-blue">funny</span>
             </h1>
           </div>
 
-          <div className="hidden lg:flex items-center gap-4 text-sm border-l border-mocha-surface1 pl-6">
+          <div className="flex items-center gap-2 bg-mocha-surface0 p-1 rounded-lg border border-mocha-surface1">
+            <Button
+              variant={view === 'models' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setView('models')}
+              className="flex items-center gap-2"
+            >
+              <LayoutGrid className="w-4 h-4" />
+              Models
+            </Button>
+            <Button
+              variant={view === 'chat' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setView('chat')}
+              className="flex items-center gap-2"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Evaluation
+            </Button>
+            <Button
+              variant={view === 'joke' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setView('joke')}
+              className="flex items-center gap-2"
+            >
+              <Laugh className="w-4 h-4" />
+              Tell me a Joke
+            </Button>
+            <Button
+              variant={view === 'funny_index' ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setView('funny_index')}
+              className="flex items-center gap-2"
+            >
+              <Trophy className="w-4 h-4" />
+              Funny Index
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-mocha-surface0/50 rounded-lg border border-mocha-surface1/50 text-mocha-subtext0">
+            <Users className="w-4 h-4 text-mocha-blue" />
+            <span className="text-sm font-bold font-mono">
+              {visitorCount || '...'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="hidden lg:flex items-center gap-4 text-sm">
             <a 
               href="https://github.com/morrillt/free-llm-evaluator" 
               target="_blank" 
@@ -105,29 +298,8 @@ export const ClientApp: React.FC<ClientAppProps> = ({
               oneshotted by BROZ OS
             </button>
           </div>
-        </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-mocha-surface0 p-1 rounded-lg">
-            <Button
-              variant={view === 'models' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setView('models')}
-              className="flex items-center gap-2"
-            >
-              <LayoutGrid className="w-4 h-4" />
-              Models
-            </Button>
-            <Button
-              variant={view === 'chat' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setView('chat')}
-              className="flex items-center gap-2"
-            >
-              <MessageSquare className="w-4 h-4" />
-              Evaluation
-            </Button>
-          </div>
+          <div className="h-6 w-px bg-mocha-surface1 hidden lg:block" />
 
           <Button
             variant="ghost"
@@ -141,10 +313,21 @@ export const ClientApp: React.FC<ClientAppProps> = ({
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-7xl mx-auto h-full">
-          {view === 'models' ? (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        {/* Sidebar */}
+        {view === 'joke' ? (
+          <JokeSidebar 
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
+          />
+        ) : (
+          <JokeWall />
+        )}
+
+        <div className="flex-1 min-h-0 p-6 overflow-auto">
+          <div className="w-full h-full flex flex-col">
+            {view === 'models' ? (
+            <div className="max-w-7xl mx-auto w-full overflow-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
               <ModelSelector
                 models={initialModels}
                 selectedModelIds={settings.selectedModels}
@@ -163,15 +346,36 @@ export const ClientApp: React.FC<ClientAppProps> = ({
                 </div>
               )}
             </div>
-          ) : (
+          ) : view === 'chat' ? (
             <div className="h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
               <ChatInterface
                 models={initialModels}
                 selectedModelIds={settings.selectedModels}
                 settings={settings}
+                onRandomizeModel={handleRandomizeModel}
+                onUpdateSettings={handleUpdateSettings}
+              />
+            </div>
+          ) : view === 'joke' ? (
+            <div className="h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <JokeInterface
+                models={initialModels}
+                selectedModelIds={settings.selectedModels}
+                settings={settings}
+                onRandomizeModel={handleRandomizeModel}
+                onUpdateSettings={handleUpdateSettings}
+                onOpenSettings={() => setIsSettingsOpen(true)}
+              />
+            </div>
+          ) : (
+            <div className="h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <FunnyIndex
+                models={initialModels}
+                conversations={conversations}
               />
             </div>
           )}
+          </div>
         </div>
       </div>
 

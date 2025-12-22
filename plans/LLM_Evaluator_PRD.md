@@ -1,7 +1,7 @@
-# PRODUCT REQUIREMENTS DOCUMENT (PRD) — Free LLM Evaluator (Next.js)
+# PRODUCT REQUIREMENTS DOCUMENT (PRD) — freellmfunny
 
 ## Meta: Ownership & Context
-- **Title:** Free LLM Evaluator (Next.js)
+- **Title:** freellmfunny
 - **Product Area:** LLM Tooling / Benchmarking
 - **Owner:** User
 - **Stakeholders:** User (PM/Eng)

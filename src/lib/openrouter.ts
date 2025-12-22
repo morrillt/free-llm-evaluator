@@ -7,7 +7,7 @@ export async function fetchFreeModels(): Promise<Model[]> {
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'Free LLM Evaluator',
+        'X-Title': 'freellmfunny',
       },
     });
 
@@ -35,3 +35,5 @@ export async function fetchFreeModels(): Promise<Model[]> {
     return [];
   }
 }
+
+

@@ -3,7 +3,7 @@
 import React from 'react';
 import { Settings, ModelOverride } from '@/lib/types';
 import { Button } from './ui/Button';
-import { Settings as SettingsIcon, X, ShieldAlert, ExternalLink } from 'lucide-react';
+import { Settings as SettingsIcon, X } from 'lucide-react';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -47,6 +47,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           <section>
             <label className="block text-sm font-medium text-mocha-subtext1 mb-2">
+              Joke Mode Prompt (Larry David Edition)
+            </label>
+            <textarea
+              className="w-full h-32 p-3 bg-mocha-surface0 border border-mocha-surface1 rounded-md text-mocha-text focus:outline-none focus:ring-2 focus:ring-mocha-pink"
+              placeholder="What would Larry David say?"
+              value={settings.jokeSystemPrompt || ''}
+              onChange={(e) => updateGlobal('jokeSystemPrompt', e.target.value)}
+            />
+          </section>
+
+          <section>
+            <label className="block text-sm font-medium text-mocha-subtext1 mb-2">
               Temperature ({settings.globalTemperature})
             </label>
             <input
@@ -60,52 +72,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             />
           </section>
 
-          <section className="flex items-center justify-between p-4 bg-mocha-surface0 rounded-lg border border-mocha-surface1">
-            <div>
-              <h3 className="font-medium text-mocha-text">Enable Thinking</h3>
-              <p className="text-xs text-mocha-subtext0">For models that support reasoning</p>
-            </div>
-            <input
-              type="checkbox"
-              className="w-5 h-5 accent-mocha-blue"
-              checked={settings.globalThinkingEnabled}
-              onChange={(e) => updateGlobal('globalThinkingEnabled', e.target.checked)}
-            />
-          </section>
-
-          {settings.globalThinkingEnabled && (
-            <section>
-              <label className="block text-sm font-medium text-mocha-subtext1 mb-2">
-                Thinking Budget ({settings.globalThinkingBudget} tokens)
-              </label>
+          <section className="flex flex-col gap-2 p-4 bg-mocha-surface0 rounded-lg border border-mocha-surface1">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-medium text-mocha-text">Enable Thinking</h3>
+                <p className="text-xs text-mocha-subtext0">For models that support reasoning</p>
+              </div>
               <input
-                type="number"
-                className="w-full p-2 bg-mocha-surface0 border border-mocha-surface1 rounded-md text-mocha-text focus:outline-none focus:ring-2 focus:ring-mocha-blue"
-                value={settings.globalThinkingBudget}
-                onChange={(e) => updateGlobal('globalThinkingBudget', parseInt(e.target.value))}
+                type="checkbox"
+                className="w-5 h-5 accent-mocha-blue"
+                checked={settings.globalThinkingEnabled}
+                onChange={(e) => updateGlobal('globalThinkingEnabled', e.target.checked)}
               />
-            </section>
-          )}
-
-          <section className="p-4 bg-mocha-red/5 rounded-lg border border-mocha-red/20 space-y-3">
-            <div className="flex items-center gap-2 text-mocha-red">
-              <ShieldAlert className="w-5 h-5" />
-              <h3 className="font-bold">Free Model Policy</h3>
             </div>
-            <p className="text-xs text-mocha-subtext1 leading-relaxed">
-              Many free models (like Moonshot Kimi) require you to allow data training in your OpenRouter settings.
+            <p className="text-[10px] text-mocha-red italic">
+              currently not working, feel free to help
             </p>
-            <a
-              href="https://openrouter.ai/settings/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-mocha-blue hover:underline"
-            >
-              Configure OpenRouter Privacy
-              <ExternalLink className="w-3 h-3" />
-            </a>
           </section>
-          
+
           <div className="pt-6 border-t border-mocha-surface1">
             <Button className="w-full" onClick={onClose}>
               Done
@@ -116,3 +100,4 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     </div>
   );
 };
+

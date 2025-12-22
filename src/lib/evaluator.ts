@@ -8,6 +8,7 @@ export interface StreamChunk {
   isDone: boolean;
   metrics?: {
     duration: number;
+    ttft?: number;
     tokenCount: number;
     thinkingDuration?: number;
     thinkingTokenCount?: number;
@@ -26,8 +27,13 @@ export async function* evaluateModelStream(
   const thinkingEnabled = override.thinkingEnabled ?? settings.globalThinkingEnabled;
   const thinkingBudget = override.thinkingBudget ?? settings.globalThinkingBudget;
 
+  let effectiveSystemPrompt = systemPrompt;
+  if (thinkingEnabled && thinkingBudget > 0) {
+    effectiveSystemPrompt += `\n\n[IMPORTANT: Keep your internal reasoning/thinking extremely concise. Aim for under ${thinkingBudget} tokens of reasoning.]`;
+  }
+
   const fullMessages = [
-    { role: 'system', content: systemPrompt },
+    { role: 'system', content: effectiveSystemPrompt },
     ...messages,
   ];
 
@@ -36,8 +42,36 @@ export async function* evaluateModelStream(
   let lastThinkingTokenTime: number | null = null;
   let tokenCount = 0;
   let thinkingTokenCount = 0;
+  let charCount = 0;
+  let thinkingCharCount = 0;
   let fullContent = '';
   let fullThinkingContent = '';
+
+  const body: any = {
+    model: modelId,
+    messages: fullMessages,
+    temperature,
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+
+  if (thinkingEnabled) {
+    body.reasoning = {
+      max_tokens: thinkingBudget,
+      exclude: false,
+      enabled: true
+    };
+    // Top-level max_tokens must be > reasoning budget for many providers
+    body.max_tokens = Math.max(thinkingBudget + 2048, 4096);
+    
+    // Legacy fallback for some providers
+    if (modelId.includes('nemotron') || modelId.includes('qwen')) {
+      body.include_reasoning = true;
+      body.thinking_budget = thinkingBudget;
+    }
+  }
+
+  console.log(`[EVALUATOR] Request for ${modelId}:`, JSON.stringify(body, null, 2));
 
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -46,22 +80,12 @@ export async function* evaluateModelStream(
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'Free LLM Evaluator',
+        'X-Title': 'freellmfunny',
       },
-      body: JSON.stringify({
-        model: modelId,
-        messages: fullMessages,
-        temperature,
-        stream: true,
-        ...(thinkingEnabled && {
-          include_reasoning: true,
-          thinking: {
-            type: 'enabled',
-            budget_tokens: thinkingBudget,
-          },
-        }),
-      }),
+      body: JSON.stringify(body),
     });
+
+    console.log(`[EVALUATOR] ${modelId} response status: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -98,7 +122,7 @@ export async function* evaluateModelStream(
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        if (line.trim() === '') continue;
+        if (line.trim() === '' || line.startsWith(':')) continue;
         if (line.startsWith('data: ')) {
           const dataStr = line.slice(6);
           if (dataStr === '[DONE]') continue;
@@ -107,13 +131,29 @@ export async function* evaluateModelStream(
             const data = JSON.parse(dataStr);
             const delta = data.choices[0]?.delta;
             const content = delta?.content || '';
-            const thinking = delta?.reasoning || '';
+            
+            // Support multiple possible reasoning fields from different providers via OpenRouter
+            // Check delta.reasoning (DeepSeek/Legacy), delta.reasoning_content (OpenAI), delta.thinking (Legacy)
+            let thinking = delta?.reasoning || delta?.reasoning_content || delta?.thinking || '';
+            
+            // Handle the new standardized reasoning_details array
+            if (delta?.reasoning_details) {
+              const textParts = delta.reasoning_details
+                .filter((d: any) => d.type === 'reasoning.text')
+                .map((d: any) => d.text);
+              if (textParts.length > 0) {
+                thinking = textParts.join('');
+              }
+            }
             
             if (thinking) {
               if (!firstTokenTime) firstTokenTime = Date.now();
               fullThinkingContent += thinking;
-              thinkingTokenCount += 1;
+              thinkingCharCount += thinking.length;
+              // Very rough token estimation
+              thinkingTokenCount = Math.ceil(thinkingCharCount / 3.5);
               lastThinkingTokenTime = Date.now();
+
               yield {
                 modelId,
                 thinkingContent: thinking,
@@ -124,12 +164,19 @@ export async function* evaluateModelStream(
             if (content) {
               if (!firstTokenTime) firstTokenTime = Date.now();
               fullContent += content;
-              tokenCount += 1; // Simplistic token count
+              charCount += content.length;
+              // Very rough token estimation
+              tokenCount = Math.ceil(charCount / 3.5);
               yield {
                 modelId,
                 content,
                 isDone: false,
               };
+            }
+            
+            // If we have usage in the chunk (OpenRouter sends it at the end)
+            if (data.usage) {
+              tokenCount = data.usage.completion_tokens || tokenCount;
             }
           } catch (e) {
             console.error('Error parsing stream chunk', e);
@@ -140,15 +187,20 @@ export async function* evaluateModelStream(
 
     const endTime = Date.now();
     const duration = endTime - startTime;
+    const ttft = firstTokenTime ? firstTokenTime - startTime : duration;
     const thinkingDuration = lastThinkingTokenTime ? lastThinkingTokenTime - (firstTokenTime || startTime) : 0;
-    const tps = (tokenCount + thinkingTokenCount) / (duration / 1000);
+    
+    // TPS based on tokens
+    const totalTokens = tokenCount + thinkingTokenCount;
+    const tps = totalTokens / (duration / 1000);
 
     yield {
       modelId,
       isDone: true,
       metrics: {
         duration,
-        tokenCount,
+        ttft,
+        tokenCount: charCount, // UI uses this as chars usually
         thinkingDuration,
         thinkingTokenCount,
         tps: parseFloat(tps.toFixed(2)),
@@ -162,3 +214,5 @@ export async function* evaluateModelStream(
     };
   }
 }
+
+

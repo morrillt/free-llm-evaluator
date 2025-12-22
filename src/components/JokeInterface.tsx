@@ -1,41 +1,51 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Model, ModelResponse, Settings, Message, Joke } from '@/lib/types';
 import { ModelContainer } from './ModelContainer';
 import { Button } from './ui/Button';
-import { Send, Trash2, Download, Copy, Check } from 'lucide-react';
+import { Laugh, Meh, PartyPopper, Send, Trash2 } from 'lucide-react';
 import { saveConversationAction, saveJokeAction } from '@/app/actions';
 import posthog from 'posthog-js';
 
-interface ChatInterfaceProps {
+interface JokeInterfaceProps {
   models: Model[];
   selectedModelIds: string[];
   settings: Settings;
   onRandomizeModel: (oldModelId: string) => Promise<string | null>;
   onUpdateSettings: (settings: Settings) => void;
+  onOpenSettings: () => void;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({
+export const JokeInterface: React.FC<JokeInterfaceProps> = ({
   models,
   selectedModelIds,
   settings,
   onRandomizeModel,
   onUpdateSettings,
+  onOpenSettings,
 }) => {
-  const [prompt, setPrompt] = useState('');
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [modelContents, setModelContents] = useState<Record<string, string>>({});
   const [modelThinkingContents, setModelThinkingContents] = useState<Record<string, string>>({});
   const [modelResponses, setModelResponses] = useState<Record<string, ModelResponse>>({});
   const [streamingModels, setStreamingModels] = useState<Set<string>>(new Set());
-  const [copied, setCopied] = useState(false);
+  const [ratings, setRatings] = useState<Record<string, 'funny' | 'not_funny'>>({});
+  const [completedModels, setCompletedModels] = useState<Set<string>>(new Set());
 
   const selectedModels = models.filter((m) => selectedModelIds.includes(m.id));
 
-  const evaluateSingleModel = async (modelId: string, currentPrompt: string) => {
-    if (!currentPrompt.trim()) return;
+  // Sort model IDs so completed models come first
+  const sortedModelIds = [...selectedModelIds].sort((a, b) => {
+    const aCompleted = completedModels.has(a);
+    const bCompleted = completedModels.has(b);
+    if (aCompleted && !bCompleted) return -1;
+    if (!aCompleted && bCompleted) return 1;
+    return 0; // Keep original order for models with same completion status
+  });
 
+  const evaluateSingleJoke = async (modelId: string) => {
+    console.log('JokeInterface: Entering evaluateSingleJoke for', modelId);
     // Reset state for this model
     setModelContents(prev => ({ ...prev, [modelId]: '' }));
     setModelThinkingContents(prev => ({ ...prev, [modelId]: '' }));
@@ -45,17 +55,28 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       return next;
     });
     setStreamingModels(prev => {
+      console.log('JokeInterface: Setting streaming state for', modelId);
       const next = new Set(prev);
       next.add(modelId);
       return next;
     });
+    setRatings(prev => {
+      const next = { ...prev };
+      delete next[modelId];
+      return next;
+    });
 
-    const messages: Message[] = [{ role: 'user', content: currentPrompt }];
+    const messages: Message[] = [{ role: 'user', content: "Tell me a joke." }];
 
     try {
       const response = await fetch('/api/evaluate', {
         method: 'POST',
-        body: JSON.stringify({ modelId, messages, settings }),
+        body: JSON.stringify({ 
+          modelId, 
+          messages,
+          isJokeMode: true,
+          settings
+        }),
       });
 
       if (!response.ok) throw new Error('Failed to start evaluation');
@@ -120,26 +141,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     };
                     saveJokeAction(joke);
                   }
-                } else if (chunk.error) {
-                const errorRes = {
-                  modelId,
-                  content: currentContent,
-                  thinkingContent: currentThinking,
-                  error: chunk.error,
-                  duration: 0,
-                  tps: 0,
-                  tokenCount: 0,
-                };
-                setModelResponses((prev) => ({
-                  ...prev,
-                  [modelId]: errorRes,
-                }));
-              }
-              setStreamingModels((prev) => {
+                }
+                setStreamingModels((prev) => {
                 const next = new Set(prev);
                 next.delete(modelId);
                 return next;
               });
+              setCompletedModels(prev => new Set([...prev, modelId]));
             }
           } catch (e) {
             console.error('Error parsing chunk', e);
@@ -147,18 +155,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         }
       }
     } catch (error: any) {
-      const errRes = {
-        modelId,
-        content: '',
-        error: error.message,
-        duration: 0,
-        tps: 0,
-        tokenCount: 0,
-      };
-      setModelResponses((prev) => ({
-        ...prev,
-        [modelId]: errRes,
-      }));
       setStreamingModels((prev) => {
         const next = new Set(prev);
         next.delete(modelId);
@@ -167,52 +163,43 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  const handleSend = async () => {
-    if (!prompt.trim() || isEvaluating) return;
-
-    // Check if user is saying "is funny" about the previous responses
-    if (prompt.toLowerCase().includes('is funny')) {
-      const responsesToSave = Object.entries(modelResponses);
-      for (const [modelId, response] of responsesToSave) {
-        if (response.content.trim()) {
-          const model = models.find(m => m.id === modelId);
-          const joke: Joke = {
-            id: Date.now().toString() + '-' + modelId,
-            content: response.content,
-            modelSignature: model?.name || modelId,
-            timestamp: new Date().toISOString(),
-            comments: []
-          };
-          await saveJokeAction(joke);
-        }
-      }
-    }
+  const handleTellJoke = async () => {
+    if (isEvaluating || selectedModelIds.length === 0) return;
 
     setIsEvaluating(true);
     setModelContents({});
     setModelThinkingContents({});
     setModelResponses({});
+    setRatings({});
+    setCompletedModels(new Set());
     const newStreamingModels = new Set(selectedModelIds);
     setStreamingModels(newStreamingModels);
 
-    const messages: Message[] = [{ role: 'user', content: prompt }];
+    // Track joke_generation_started with PostHog
+    posthog.capture('joke_generation_started', {
+      model_count: selectedModelIds.length,
+      model_ids: selectedModelIds,
+      joke_prompt: settings.jokeSystemPrompt,
+    });
+
+    // Prompt is provided by system prompt in joke mode
+    const messages: Message[] = [{ role: 'user', content: "Tell me a joke." }];
+    
+    // We'll override the system prompt in the API call by passing a special flag or just handling it in actions
+    // For now, we'll use a hidden prompt approach or just rely on the server action handling it if we update it.
+    // Actually, let's just use the current API but with the joke prompt.
 
     const finalResponses: Record<string, ModelResponse> = {};
 
-    // Track evaluation_started with PostHog
-    const evaluationStartTime = Date.now();
-    posthog.capture('evaluation_started', {
-      model_count: selectedModelIds.length,
-      model_ids: selectedModelIds,
-      prompt_length: prompt.length,
-    });
-
-    // Trigger evaluations in parallel
     const evalPromises = selectedModelIds.map(async (modelId) => {
       try {
         const response = await fetch('/api/evaluate', {
           method: 'POST',
-          body: JSON.stringify({ modelId, messages }),
+          body: JSON.stringify({ 
+            modelId, 
+            messages,
+            isJokeMode: true // We'll handle this in the API route
+          }),
         });
 
         if (!response.ok) throw new Error('Failed to start evaluation');
@@ -278,27 +265,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     };
                     saveJokeAction(joke);
                   }
-                } else if (chunk.error) {
-                  const errorRes = {
-                    modelId,
-                    content: currentContent,
-                    thinkingContent: currentThinking,
-                    error: chunk.error,
-                    duration: 0,
-                    tps: 0,
-                    tokenCount: 0,
-                  };
-                  finalResponses[modelId] = errorRes;
-                  setModelResponses((prev) => ({
-                    ...prev,
-                    [modelId]: errorRes,
-                  }));
                 }
                 setStreamingModels((prev) => {
                   const next = new Set(prev);
                   next.delete(modelId);
                   return next;
                 });
+                setCompletedModels(prev => new Set([...prev, modelId]));
               }
             } catch (e) {
               console.error('Error parsing chunk', e);
@@ -306,19 +279,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           }
         }
       } catch (error: any) {
-        const errRes = {
-          modelId,
-          content: '',
-          error: error.message,
-          duration: 0,
-          tps: 0,
-          tokenCount: 0,
-        };
-        finalResponses[modelId] = errRes;
-        setModelResponses((prev) => ({
-          ...prev,
-          [modelId]: errRes,
-        }));
         setStreamingModels((prev) => {
           const next = new Set(prev);
           next.delete(modelId);
@@ -328,79 +288,98 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     });
 
     await Promise.all(evalPromises);
-
-    // Save conversation to local storage
-    if (Object.keys(finalResponses).length > 0) {
-      await saveConversationAction({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        prompt,
-        responses: finalResponses,
-      });
-    }
-
-    // Track evaluation_completed with PostHog
-    const successfulResponses = Object.values(finalResponses).filter(r => !r.error);
-    const errorResponses = Object.values(finalResponses).filter(r => r.error);
-    posthog.capture('evaluation_completed', {
-      model_count: selectedModelIds.length,
-      successful_count: successfulResponses.length,
-      error_count: errorResponses.length,
-      total_duration_ms: Date.now() - evaluationStartTime,
-      average_tps: successfulResponses.length > 0
-        ? successfulResponses.reduce((sum, r) => sum + r.tps, 0) / successfulResponses.length
-        : 0,
-    });
-
     setIsEvaluating(false);
   };
 
-  const handleExport = () => {
-    const data = {
-      prompt,
-      timestamp: new Date().toISOString(),
-      results: selectedModels.map((m) => ({
-        model: m.name,
-        ...modelResponses[m.id],
-      })),
-    };
+  const handleRate = async (modelId: string, rating: 'funny' | 'not_funny') => {
+    const response = modelResponses[modelId];
+    if (!response) return;
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `evaluation-${new Date().getTime()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const model = models.find(m => m.id === modelId);
 
-    // Track results_exported with PostHog
-    posthog.capture('results_exported', {
-      model_count: selectedModels.length,
-      result_count: Object.keys(modelResponses).length,
-      export_format: 'json',
+    // Track joke_rated with PostHog
+    posthog.capture('joke_rated', {
+      model_id: modelId,
+      model_name: model?.name || modelId,
+      rating: rating,
+      is_funny: rating === 'funny',
+      response_tps: response.tps,
+      response_duration_ms: response.duration,
     });
-  };
 
-  const handleCopy = () => {
-    const data = {
-      prompt,
-      results: selectedModels.map((m) => ({
-        model: m.name,
-        content: modelContents[m.id],
-        metrics: modelResponses[m.id],
-      })),
-    };
-    navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const newResponse = { ...response, rating };
+
+    setRatings(prev => ({ ...prev, [modelId]: rating }));
+    setModelResponses(prev => ({ ...prev, [modelId]: newResponse }));
+
+    // If rated funny, add to Joke Wall
+    if (rating === 'funny') {
+      const joke: Joke = {
+        id: Date.now().toString() + '-' + modelId,
+        content: response.content,
+        modelSignature: model?.name || modelId,
+        timestamp: new Date().toISOString(),
+        comments: []
+      };
+      await saveJokeAction(joke);
+    }
+
+    // Update final responses and save
+    const updatedResponses = { ...modelResponses, [modelId]: newResponse };
+    
+    await saveConversationAction({
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      prompt: "Tell me a joke (Joke Mode)",
+      responses: updatedResponses,
+    });
   };
 
   return (
     <div className="flex flex-col h-full space-y-4 overflow-hidden">
+      <div className="bg-mocha-mantle p-4 border border-mocha-surface1 rounded-2xl shadow-xl flex items-center justify-between gap-8 flex-shrink-0">
+        <div className="flex items-center gap-8 flex-1 min-w-0">
+          <div className="flex-shrink-0">
+            <h1 className="text-mocha-pink text-xl font-black tracking-tight">
+              Testing the funniness and speed of all free models on Open Router. 
+              <span className="text-mocha-yellow ml-2">-&lt;</span>
+            </h1>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-2xl text-mocha-lavender italic font-medium truncate">
+              "{settings.jokeSystemPrompt}"
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4 flex-shrink-0">
+          <Button
+            size="lg"
+            variant="secondary"
+            onClick={onOpenSettings}
+            className="whitespace-nowrap flex items-center justify-center gap-3 bg-mocha-lavender hover:bg-mocha-lavender/90 text-mocha-base font-black px-8 py-4 text-xl rounded-full shadow-lg shadow-mocha-lavender/20 transition-transform hover:scale-105 active:scale-95"
+          >
+            <PartyPopper className="w-6 h-6" />
+            REMIX THE MAGIC
+          </Button>
+          <Button 
+            size="lg" 
+            onClick={handleTellJoke} 
+            disabled={isEvaluating || selectedModelIds.length === 0}
+            className="bg-mocha-yellow hover:bg-mocha-yellow/90 text-mocha-base font-black px-8 py-4 text-xl rounded-full shadow-lg shadow-mocha-yellow/20 whitespace-nowrap transition-transform hover:scale-105 active:scale-95"
+          >
+            {isEvaluating ? 'THINKING...' : 'GENERATE JOKES'}
+          </Button>
+        </div>
+      </div>
+
       <div className="flex-1 flex gap-4 min-h-0 overflow-x-auto p-1 pb-4">
-        {selectedModelIds.length > 0 ? (
-          selectedModelIds.map((modelId) => {
+        {sortedModelIds.length > 0 ? (
+          sortedModelIds.map((modelId) => {
             const model = models.find((m) => m.id === modelId);
+            const response = modelResponses[modelId];
+            const currentRating = ratings[modelId];
+
             return (
               <div key={modelId} className="flex-shrink-0 w-[400px] h-full">
                 <ModelContainer
@@ -408,95 +387,31 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   modelName={model?.name || modelId}
                   content={modelContents[modelId] || ''}
                   thinkingContent={modelThinkingContents[modelId] || ''}
-                  response={modelResponses[modelId]}
+                  response={response}
                   isStreaming={streamingModels.has(modelId)}
                   onRandomize={async () => {
-                    console.log('ChatInterface: Randomizing model', modelId);
+                    console.log('JokeInterface: Randomizing model', modelId);
                     const newModelId = await onRandomizeModel(modelId);
-                    console.log('ChatInterface: New model ID received:', newModelId);
-                    if (newModelId && prompt.trim()) {
-                      console.log('ChatInterface: Re-prompting with new model', newModelId);
-                      setTimeout(() => evaluateSingleModel(newModelId, prompt), 50);
+                    console.log('JokeInterface: New model ID received:', newModelId);
+                    if (newModelId) {
+                      console.log('JokeInterface: Re-prompting with new model', newModelId);
+                      setTimeout(() => evaluateSingleJoke(newModelId), 50);
                     }
                   }}
-                  onRefresh={() => evaluateSingleModel(modelId, prompt)}
+                  onRefresh={() => evaluateSingleJoke(modelId)}
                   settings={settings}
                   onUpdateSettings={onUpdateSettings}
+                  rating={currentRating}
+                  onRate={(rating) => handleRate(modelId, rating)}
                 />
               </div>
             );
           })
         ) : (
           <div className="flex-1 flex items-center justify-center border-2 border-dashed border-mocha-surface1 rounded-xl text-mocha-surface2">
-            Select up to 7 models to start evaluation
+            Select some models first to hear some jokes!
           </div>
         )}
-      </div>
-
-      <div className="bg-mocha-mantle p-4 border border-mocha-surface1 rounded-xl shadow-2xl">
-        <div className="flex gap-4">
-          <textarea
-            className="flex-1 bg-mocha-surface0 border border-mocha-surface1 rounded-lg p-4 text-mocha-text focus:outline-none focus:ring-2 focus:ring-mocha-blue resize-none h-24"
-            placeholder="Enter your prompt here..."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-          />
-          <div className="flex flex-col gap-2">
-            <Button
-              className="h-full flex flex-col items-center justify-center gap-1 min-w-[80px]"
-              onClick={handleSend}
-              disabled={isEvaluating || !prompt.trim() || selectedModelIds.length === 0}
-            >
-              <Send className="w-6 h-6" />
-              <span className="text-xs">Send</span>
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between">
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setPrompt('');
-                setModelContents({});
-                setModelResponses({});
-              }}
-              disabled={isEvaluating}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Clear
-            </Button>
-          </div>
-          
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleCopy}
-              disabled={Object.keys(modelResponses).length === 0}
-            >
-              {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
-              {copied ? 'Copied' : 'Copy JSON'}
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleExport}
-              disabled={Object.keys(modelResponses).length === 0}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-          </div>
-        </div>
       </div>
     </div>
   );
