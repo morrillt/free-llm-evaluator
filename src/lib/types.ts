@@ -39,9 +39,12 @@ export interface Conversation {
 export interface ModelResponse {
   modelId: string;
   content: string;
+  thinkingContent?: string;
   duration: number; // in ms
+  thinkingDuration?: number; // in ms
   tps: number;
   tokenCount: number;
+  thinkingTokenCount?: number;
   error?: string;
   rawResponse?: any;
 }

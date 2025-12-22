@@ -21,6 +21,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [prompt, setPrompt] = useState('');
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [modelContents, setModelContents] = useState<Record<string, string>>({});
+  const [modelThinkingContents, setModelThinkingContents] = useState<Record<string, string>>({});
   const [modelResponses, setModelResponses] = useState<Record<string, ModelResponse>>({});
   const [streamingModels, setStreamingModels] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
@@ -32,6 +33,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     setIsEvaluating(true);
     setModelContents({});
+    setModelThinkingContents({});
     setModelResponses({});
     const newStreamingModels = new Set(selectedModelIds);
     setStreamingModels(newStreamingModels);
@@ -56,6 +58,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         const decoder = new TextDecoder();
         let buffer = '';
         let currentContent = '';
+        let currentThinking = '';
 
         while (true) {
           const { done, value } = await reader.read();
@@ -76,11 +79,19 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   [modelId]: (prev[modelId] || '') + chunk.content,
                 }));
               }
+              if (chunk.thinkingContent) {
+                currentThinking += chunk.thinkingContent;
+                setModelThinkingContents((prev) => ({
+                  ...prev,
+                  [modelId]: (prev[modelId] || '') + chunk.thinkingContent,
+                }));
+              }
               if (chunk.isDone) {
                 if (chunk.metrics) {
                   const modelRes = {
                     modelId,
                     content: currentContent,
+                    thinkingContent: currentThinking,
                     ...chunk.metrics,
                   };
                   finalResponses[modelId] = modelRes;
@@ -92,6 +103,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   const errorRes = {
                     modelId,
                     content: currentContent,
+                    thinkingContent: currentThinking,
                     error: chunk.error,
                     duration: 0,
                     tps: 0,
@@ -157,7 +169,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       timestamp: new Date().toISOString(),
       results: selectedModels.map((m) => ({
         model: m.name,
-        modelId: m.id,
         ...modelResponses[m.id],
       })),
     };
@@ -197,6 +208,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 modelId={modelId}
                 modelName={model?.name || modelId}
                 content={modelContents[modelId] || ''}
+                thinkingContent={modelThinkingContents[modelId] || ''}
                 response={modelResponses[modelId]}
                 isStreaming={streamingModels.has(modelId)}
               />

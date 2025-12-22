@@ -3,11 +3,14 @@ import { Message, ModelOverride, Settings } from './types';
 export interface StreamChunk {
   modelId: string;
   content?: string;
+  thinkingContent?: string;
   error?: string;
   isDone: boolean;
   metrics?: {
     duration: number;
     tokenCount: number;
+    thinkingDuration?: number;
+    thinkingTokenCount?: number;
     tps: number;
   };
 }
@@ -29,8 +32,12 @@ export async function* evaluateModelStream(
   ];
 
   const startTime = Date.now();
+  let firstTokenTime: number | null = null;
+  let lastThinkingTokenTime: number | null = null;
   let tokenCount = 0;
+  let thinkingTokenCount = 0;
   let fullContent = '';
+  let fullThinkingContent = '';
 
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -58,10 +65,19 @@ export async function* evaluateModelStream(
 
     if (!response.ok) {
       const errorText = await response.text();
-      let errorMessage = `OpenRouter API error: ${response.status} ${errorText}`;
+      let errorMessage = `OpenRouter API error: ${response.status}`;
       
-      if (errorText.includes('data policy') || errorText.includes('Free model publication')) {
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error?.message || errorMessage;
+      } catch (e) {
+        errorMessage = `${errorMessage} ${errorText}`;
+      }
+      
+      if (errorMessage.includes('data policy') || errorMessage.includes('Free model publication')) {
         errorMessage = 'Data policy error: You must enable "Free model publication" in your OpenRouter privacy settings to use this model. Visit https://openrouter.ai/settings/privacy';
+      } else if (response.status === 429 || errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('rate-limited')) {
+        errorMessage = `Rate limit error: ${errorMessage}`;
       }
       
       throw new Error(errorMessage);
@@ -90,9 +106,23 @@ export async function* evaluateModelStream(
           try {
             const data = JSON.parse(dataStr);
             const delta = data.choices[0]?.delta;
-            const content = delta?.content || delta?.reasoning || '';
+            const content = delta?.content || '';
+            const thinking = delta?.reasoning || '';
             
+            if (thinking) {
+              if (!firstTokenTime) firstTokenTime = Date.now();
+              fullThinkingContent += thinking;
+              thinkingTokenCount += 1;
+              lastThinkingTokenTime = Date.now();
+              yield {
+                modelId,
+                thinkingContent: thinking,
+                isDone: false,
+              };
+            }
+
             if (content) {
+              if (!firstTokenTime) firstTokenTime = Date.now();
               fullContent += content;
               tokenCount += 1; // Simplistic token count
               yield {
@@ -108,8 +138,10 @@ export async function* evaluateModelStream(
       }
     }
 
-    const duration = Date.now() - startTime;
-    const tps = tokenCount / (duration / 1000);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    const thinkingDuration = lastThinkingTokenTime ? lastThinkingTokenTime - (firstTokenTime || startTime) : 0;
+    const tps = (tokenCount + thinkingTokenCount) / (duration / 1000);
 
     yield {
       modelId,
@@ -117,6 +149,8 @@ export async function* evaluateModelStream(
       metrics: {
         duration,
         tokenCount,
+        thinkingDuration,
+        thinkingTokenCount,
         tps: parseFloat(tps.toFixed(2)),
       },
     };
