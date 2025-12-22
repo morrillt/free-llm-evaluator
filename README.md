@@ -2,6 +2,14 @@
 
 A standalone Next.js application designed to evaluate and compare multiple free LLM models available via [OpenRouter](https://openrouter.ai/). 
 
+## Genesis
+
+This project was built as part of a test comparing various open-source models against **Gemini 3 Flash (flash3)** to "one-shot" create this entire application.
+
+The design was guided by a dual-format PRD approach—a neat style inspired by **BMAD**:
+- [**MD Version (Human Readable)**](./plans/LLM_Evaluator_PRD.md): Created for personal review and readability.
+- [**XML Version (AI Optimized)**](./plans/LLM_Evaluator_PRD.xml): Structured specifically for the AI to ingest and execute against.
+
 ## Features
 
 - **Multi-Model Comparison**: Select up to 5 free models and prompt them simultaneously.
@@ -31,7 +39,7 @@ A standalone Next.js application designed to evaluate and compare multiple free 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/free-llm-evaluator.git
+   git clone https://github.com/morrillt/free-llm-evaluator.git
    cd free-llm-evaluator
    ```
 

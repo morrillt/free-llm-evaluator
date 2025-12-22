@@ -1,0 +1,232 @@
+<PRDTemplate version="1.1" size="full">
+
+  <!-- ========================= -->
+  <!-- Meta: Ownership & Context -->
+  <!-- ========================= -->
+  <Meta>
+    <Title>Free LLM Evaluator (Next.js)</Title>
+    <ProductArea>LLM Tooling / Benchmarking</ProductArea>
+    <Owner>User</Owner>
+    <Stakeholders>
+      <Stakeholder role="PM/Eng" name="User" />
+    </Stakeholders>
+    <Status>Draft</Status>
+    <LastUpdated>2025-12-22</LastUpdated>
+  </Meta>
+
+  <!-- =============================== -->
+  <!-- 1. High-Level Description -->
+  <!-- =============================== -->
+  <Section id="1" name="High-Level Description">
+    <IntroParagraph>
+      A standalone Next.js application designed to evaluate and compare multiple free LLM models available via OpenRouter. The app allows users to select up to 5 models from the "free" tier, configure global and per-model system prompts and "thinking" parameters, and view real-time profiling (TPS, duration) in a Catppuccin-themed UI. All settings and conversations are persisted to local flat files on the server for a seamless multi-session experience.
+    </IntroParagraph>
+    <SupportingBullets>
+      <Bullet>Primary Persona: Developer/Researcher evaluating LLM performance/cost-efficiency.</Bullet>
+      <Bullet>Core Journey: Select models → Configure Prompts/Knobs → Send Prompt → Compare Profiling & Responses → Copy aggregated JSON.</Bullet>
+      <Bullet>Business Value: Rapid iteration and quality check across the latest free LLM offerings without manual API calls.</Bullet>
+      <Bullet>Out-of-Scope: User authentication, multiple concurrent users, complex database integrations, paid model tier management.</Bullet>
+      <Bullet>Constraints: OpenRouter API limits for free models; limited to Next.js server-side file persistence.</Bullet>
+    </SupportingBullets>
+  </Section>
+
+  <!-- =============================== -->
+  <!-- 2. Goals and Non-Goals -->
+  <!-- =============================== -->
+  <Section id="2" name="Goals and Non-Goals">
+    <Goals>
+      <Goal>Provide a unified UI to prompt multiple free LLMs simultaneously.</Goal>
+      <Goal>Persist all configurations (System Prompts, Model Selection, Knobs) to a local JSON file.</Goal>
+      <Goal>Expose per-model profiling metrics: Tokens Per Second (TPS) and Total Duration.</Goal>
+      <Goal>Allow fine-grained model overrides for "Thinking" budget and temperature.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>No database requirement (PostgreSQL, MongoDB, etc.).</NonGoal>
+      <NonGoal>No multi-user support or session isolation (single-user design).</NonGoal>
+      <NonGoal>No support for paid OpenRouter models in the initial scope.</NonGoal>
+    </NonGoals>
+  </Section>
+
+  <!-- =============================== -->
+  <!-- 3. Functional Requirements -->
+  <!-- =============================== -->
+  <Section id="3" name="Functional Requirements">
+    <FunctionalRequirementsTable>
+      <Row>
+        <ID>FR-1</ID>
+        <UserStory>As a user, I want the app to automatically discover all models on OpenRouter with "free" in the name.</UserStory>
+        <AcceptanceCriteria>
+          <Criterion>App fetches model list from OpenRouter API on startup or refresh.</Criterion>
+          <Criterion>Filters for models containing the "free" keyword.</Criterion>
+        </AcceptanceCriteria>
+        <EdgeCases>
+          <EdgeCase>API failure: Show error state with retry option.</EdgeCase>
+        </EdgeCases>
+        <Priority>P0</Priority>
+      </Row>
+      <Row>
+        <ID>FR-2</ID>
+        <UserStory>As a user, I want to select up to 5 free models for my current evaluation session.</UserStory>
+        <AcceptanceCriteria>
+          <Criterion>UI allows selecting/deselecting from the filtered free list.</Criterion>
+          <Criterion>Cap at 5 active models.</Criterion>
+          <Criterion>Selection is persisted to `data/settings.json`.</Criterion>
+        </AcceptanceCriteria>
+        <Priority>P0</Priority>
+      </Row>
+      <Row>
+        <ID>FR-3</ID>
+        <UserStory>As a user, I want to configure global default settings and model-specific overrides.</UserStory>
+        <AcceptanceCriteria>
+          <Criterion>Global settings: Default System Prompt, Temperature, Thinking Toggle, Thinking Budget.</Criterion>
+          <Criterion>Per-model overrides via gear icon: Same parameters as global settings.</Criterion>
+          <Criterion>Settings persist to `data/settings.json` between sessions.</Criterion>
+        </AcceptanceCriteria>
+        <Priority>P0</Priority>
+      </Row>
+      <Row>
+        <ID>FR-4</ID>
+        <UserStory>As a user, I want to send a single prompt and receive streamed responses from all 5 models simultaneously.</UserStory>
+        <AcceptanceCriteria>
+          <Criterion>UI displays response containers for each active model.</Criterion>
+          <Criterion>Parallel API calls to OpenRouter for each model.</Criterion>
+          <Criterion>Streaming support for real-time output visualization.</Criterion>
+        </AcceptanceCriteria>
+        <Priority>P0</Priority>
+      </Row>
+      <Row>
+        <ID>FR-5</ID>
+        <UserStory>As a user, I want to see performance profiling for each response.</UserStory>
+        <AcceptanceCriteria>
+          <Criterion>Track and display: Tokens Per Second (TPS).</Criterion>
+          <Criterion>Track and display: Total time from prompt send to completion.</Criterion>
+          <Criterion>Track and display: Total response size in characters/tokens.</Criterion>
+        </AcceptanceCriteria>
+        <Priority>P1</Priority>
+      </Row>
+      <Row>
+        <ID>FR-6</ID>
+        <UserStory>As a user, I want to export the results of a chat session as JSON.</UserStory>
+        <AcceptanceCriteria>
+          <Criterion>Aggregation of all 5 model responses + profiling data into one JSON object.</Criterion>
+          <Criterion>Toggle between "Cleaned" (content + metrics) and "Raw" (full API response).</Criterion>
+          <Criterion>Copy-to-clipboard functionality.</Criterion>
+        </AcceptanceCriteria>
+        <Priority>P1</Priority>
+      </Row>
+    </FunctionalRequirementsTable>
+  </Section>
+
+  <!-- =============================== -->
+  <!-- 4. User Flows -->
+  <!-- =============================== -->
+  <Section id="4" name="User Flows">
+    <UserFlow id="UF-1">
+      <Name>Model Selection and Configuration</Name>
+      <Goal>Configure the evaluator environment.</Goal>
+      <PrimaryUser>Developer</PrimaryUser>
+      <EntryPoints>
+        <EntryPoint>Homepage</EntryPoint>
+      </EntryPoints>
+      <Steps>
+        <Step index="1">User opens the app; models are fetched and filtered.</Step>
+        <Step index="2">User selects up to 5 models from the list.</Step>
+        <Step index="3">User opens "Global Settings" to set a base system prompt.</Step>
+        <Step index="4">User clicks gear icon on a specific model to enable "Thinking" budget override.</Step>
+      </Steps>
+      <ExitStates>
+        <ExitState>Settings saved to server-side JSON.</ExitState>
+      </ExitStates>
+    </UserFlow>
+    <UserFlow id="UF-2">
+      <Name>Multi-Model Evaluation</Name>
+      <Goal>Compare responses across selected models.</Goal>
+      <PrimaryUser>Developer</PrimaryUser>
+      <EntryPoints>
+        <EntryPoint>Chat Interface</EntryPoint>
+      </EntryPoints>
+      <Steps>
+        <Step index="1">User enters a prompt into the shared input field.</Step>
+        <Step index="2">User hits "Send".</Step>
+        <Step index="3">All selected model containers start showing streaming text.</Step>
+        <Step index="4">As each model finishes, profiling metrics (TPS, Time) appear above the text.</Step>
+        <Step index="5">User clicks "Export Results" to copy the session JSON.</Step>
+      </Steps>
+    </UserFlow>
+  </Section>
+
+  <!-- =============================== -->
+  <!-- 5. Architecture and Tech Options -->
+  <!-- =============================== -->
+  <Section id="5" name="Architecture and Tech Options">
+    <SystemComponents>
+      <Component>
+        <Name>Frontend</Name>
+        <Option name="Framework">Next.js (App Router)</Option>
+        <Option name="Styling">Tailwind CSS + Catppuccin Theme Palette</Option>
+        <Tradeoffs>Next.js simplifies server-side file access and API routing.</Tradeoffs>
+      </Component>
+      <Component>
+        <Name>Persistence</Name>
+        <Option name="File Storage">`data/settings.json` and `data/conversations.json`</Option>
+        <Tradeoffs>Extremely simple, no DB setup, but limited to single-user local/hosted environments.</Tradeoffs>
+      </Component>
+      <Component>
+        <Name>API Integration</Name>
+        <Option name="Provider">OpenRouter API</Option>
+        <Option name="Client">Server-side fetching to protect API keys.</Option>
+      </Component>
+    </SystemComponents>
+  </Section>
+
+  <!-- =============================== -->
+  <!-- 6. Metrics and Instrumentation -->
+  <!-- =============================== -->
+  <Section id="6" name="Metrics and Instrumentation">
+    <Metrics>
+      <Metric>
+        <Name>Tokens Per Second (TPS)</Name>
+        <Definition>Total tokens received / Total duration in seconds.</Definition>
+        <SuccessThreshold>N/A (Informational)</SuccessThreshold>
+        <WhereMeasured>Client-side (during streaming) / Final calc on Server.</WhereMeasured>
+      </Metric>
+      <Metric>
+        <Name>Total Duration</Name>
+        <Definition>Time from request initiation to stream end.</Definition>
+        <SuccessThreshold>N/A (Informational)</SuccessThreshold>
+        <WhereMeasured>Client-side.</WhereMeasured>
+      </Metric>
+    </Metrics>
+  </Section>
+
+  <!-- =============================== -->
+  <!-- 7. Risks, Dependencies, Open Questions -->
+  <!-- =============================== -->
+  <Section id="7" name="Risks Dependencies and Open Questions">
+    <Risks>
+      <Risk>OpenRouter Free Tier Rate Limits: Concurrent calls to 5 models might trigger 429 errors.</Risk>
+      <Risk>Model Incompatibility: Some models may not support "Thinking" params, potentially causing errors if not handled gracefully.</Risk>
+    </Risks>
+    <Dependencies>
+      <Dependency>OpenRouter API Key (configured in .env).</Dependency>
+      <Dependency>Next.js 14/15 runtime.</Dependency>
+    </Dependencies>
+    <OpenQuestions>
+      <Question>Should we implement a queuing system if OpenRouter rejects concurrent requests for free models?</Question>
+      <Question>Should the conversation history be limited to a certain number of turns to avoid file bloat?</Question>
+    </OpenQuestions>
+  </Section>
+
+  <!-- =============================== -->
+  <!-- Next Step: Ticket Generation -->
+  <!-- =============================== -->
+  <NextStep name="Ticket Generation">
+    <TicketingRules>
+      <Rule>One ticket per FR row.</Rule>
+      <Rule>Ensure Catppuccin theme application is a separate UI ticket.</Rule>
+      <Rule>Streaming logic should be prioritized as a P0 ticket.</Rule>
+    </TicketingRules>
+  </NextStep>
+
+</PRDTemplate>
+
