@@ -56,19 +56,36 @@ export async function* evaluateModelStream(
   };
 
   if (thinkingEnabled) {
-    body.reasoning = {
-      max_tokens: thinkingBudget,
-      exclude: false,
-      enabled: true
-    };
-    // Top-level max_tokens must be > reasoning budget for many providers
-    body.max_tokens = Math.max(thinkingBudget + 2048, 4096);
+    // Standard OpenRouter way to request reasoning/thinking
+    body.include_reasoning = true;
     
-    // Legacy fallback for some providers
-    if (modelId.includes('nemotron') || modelId.includes('qwen')) {
-      body.include_reasoning = true;
+    // Unified reasoning parameter (new spec)
+    body.reasoning = {
+      max_tokens: thinkingBudget
+    };
+    
+    // Legacy/Provider specific fallbacks for older implementations
+    if (modelId.includes('claude')) {
+      // Some providers still expect this even with OpenRouter's abstraction
+      body.thinking = {
+        type: 'enabled',
+        budget_tokens: thinkingBudget
+      };
+    }
+    
+    if (modelId.includes('qwen') || modelId.includes('deepseek') || modelId.includes('llama')) {
       body.thinking_budget = thinkingBudget;
     }
+
+    // Top-level max_tokens must be > reasoning budget for many providers
+    // We'll set a high enough limit for the whole response
+    body.max_tokens = Math.max(thinkingBudget + 4096, 8192);
+  } else {
+    // Explicitly disable reasoning
+    body.include_reasoning = false;
+    body.reasoning = {
+      effort: 'none'
+    };
   }
 
   console.log(`[EVALUATOR] Request for ${modelId}:`, JSON.stringify(body, null, 2));

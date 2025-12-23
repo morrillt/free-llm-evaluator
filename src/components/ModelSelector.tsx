@@ -65,7 +65,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   }, [filteredModels]);
 
   return (
-    <div className="flex flex-col h-full space-y-6 overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 space-y-6 overflow-hidden">
       <div className="flex-shrink-0 flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
         <div>
           <h2 className="text-3xl font-bold text-mocha-text mb-2">Select Models</h2>

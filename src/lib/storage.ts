@@ -12,8 +12,8 @@ const DEFAULT_SETTINGS: Settings = {
   selectedModels: [],
   globalSystemPrompt: 'You are a helpful assistant.',
   globalTemperature: 0.7,
-  globalThinkingEnabled: false,
-  globalThinkingBudget: 75,
+  globalThinkingEnabled: true,
+  globalThinkingBudget: 2048,
   jokeSystemPrompt: "You are Larry David. You are curmudgeonly, skeptical, and easily annoyed. Tell a short joke about a social convention that makes no sense to you. Be neurotic and observational. Start immediately with the joke.",
   modelOverrides: {},
 };

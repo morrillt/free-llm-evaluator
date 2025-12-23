@@ -83,8 +83,24 @@ export const JokeSidebar: React.FC<JokeSidebarProps> = ({ settings, onUpdateSett
               />
             </div>
           </div>
-          <p className="text-[10px] text-mocha-red font-bold italic leading-tight">
-            currently not working, feel free to help
+          
+          {settings.globalThinkingEnabled && (
+            <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-bold text-mocha-subtext1 uppercase">Budget (Tokens)</label>
+                <span className="text-[10px] font-mono text-mocha-mauve">{settings.globalThinkingBudget}</span>
+              </div>
+              <input
+                type="number"
+                className="w-full p-2 bg-mocha-crust border border-mocha-surface1 rounded-lg text-xs text-mocha-text focus:outline-none focus:ring-1 focus:ring-mocha-mauve"
+                value={settings.globalThinkingBudget}
+                onChange={(e) => updateGlobal('globalThinkingBudget', parseInt(e.target.value) || 0)}
+              />
+            </div>
+          )}
+
+          <p className="text-[10px] text-mocha-green font-bold italic leading-tight">
+            Trying to fix this! Let me know if it works.
           </p>
         </section>
       </div>

@@ -4,6 +4,7 @@ import React from 'react';
 import { Settings, ModelOverride } from '@/lib/types';
 import { Button } from './ui/Button';
 import { Settings as SettingsIcon, X } from 'lucide-react';
+import posthog from 'posthog-js';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -17,6 +18,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onClose,
 }) => {
   const updateGlobal = (key: keyof Settings, value: any) => {
+    // Track settings_updated with PostHog
+    posthog.capture('settings_updated', {
+      setting_key: key,
+      setting_value: typeof value === 'string' && value.length > 100
+        ? value.substring(0, 100) + '...'
+        : value,
+      has_custom_system_prompt: key === 'globalSystemPrompt' || !!settings.globalSystemPrompt,
+      has_custom_joke_prompt: key === 'jokeSystemPrompt' || !!settings.jokeSystemPrompt,
+      temperature: key === 'globalTemperature' ? value : settings.globalTemperature,
+      thinking_enabled: key === 'globalThinkingEnabled' ? value : settings.globalThinkingEnabled,
+    });
+
     onUpdateSettings({ ...settings, [key]: value });
   };
 
@@ -72,7 +85,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             />
           </section>
 
-          <section className="flex flex-col gap-2 p-4 bg-mocha-surface0 rounded-lg border border-mocha-surface1">
+          <section className="flex flex-col gap-3 p-4 bg-mocha-surface0 rounded-lg border border-mocha-surface1">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-medium text-mocha-text">Enable Thinking</h3>
@@ -85,8 +98,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 onChange={(e) => updateGlobal('globalThinkingEnabled', e.target.checked)}
               />
             </div>
-            <p className="text-[10px] text-mocha-red italic">
-              currently not working, feel free to help
+            
+            {settings.globalThinkingEnabled && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200 border-t border-mocha-surface1 pt-3 mt-1">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-medium text-mocha-subtext1">Thinking Budget (Tokens)</label>
+                  <span className="text-xs font-mono text-mocha-blue bg-mocha-blue/10 px-2 py-0.5 rounded">{settings.globalThinkingBudget}</span>
+                </div>
+                <input
+                  type="number"
+                  className="w-full p-2 bg-mocha-mantle border border-mocha-surface1 rounded text-sm text-mocha-text focus:outline-none focus:ring-1 focus:ring-mocha-blue"
+                  value={settings.globalThinkingBudget}
+                  onChange={(e) => updateGlobal('globalThinkingBudget', parseInt(e.target.value) || 0)}
+                />
+              </div>
+            )}
+
+            <p className="text-[10px] text-mocha-green italic">
+              Trying to fix this! Let me know if it works.
             </p>
           </section>
 

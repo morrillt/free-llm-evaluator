@@ -37,7 +37,7 @@ export const ModelContainer: React.FC<ModelContainerProps> = ({
   const [isThinkingExpanded, setIsThinkingExpanded] = React.useState(false);
 
   const override = settings?.modelOverrides[modelId];
-  const currentThinkingBudget = override?.thinkingBudget ?? settings?.globalThinkingBudget ?? 75;
+  const currentThinkingBudget = override?.thinkingBudget ?? settings?.globalThinkingBudget ?? 2048;
   const isThinkingEnabled = override?.thinkingEnabled ?? settings?.globalThinkingEnabled ?? false;
 
   const handleBudgetChange = (value: number) => {
@@ -47,6 +47,16 @@ export const ModelContainer: React.FC<ModelContainerProps> = ({
       ...(newOverrides[modelId] || {}),
       thinkingBudget: value,
       thinkingEnabled: true, // Auto-enable if adjusting budget
+    };
+    onUpdateSettings({ ...settings, modelOverrides: newOverrides });
+  };
+
+  const handleToggleThinking = (enabled: boolean) => {
+    if (!settings || !onUpdateSettings) return;
+    const newOverrides = { ...settings.modelOverrides };
+    newOverrides[modelId] = {
+      ...(newOverrides[modelId] || {}),
+      thinkingEnabled: enabled,
     };
     onUpdateSettings({ ...settings, modelOverrides: newOverrides });
   };
@@ -94,6 +104,8 @@ export const ModelContainer: React.FC<ModelContainerProps> = ({
                   old_model_id: modelId,
                   old_model_name: modelName,
                   trigger: 'header_button',
+                  thinking_budget: currentThinkingBudget,
+                  thinking_enabled: isThinkingEnabled
                 });
                 onRandomize();
               }}
@@ -110,24 +122,36 @@ export const ModelContainer: React.FC<ModelContainerProps> = ({
       {/* Thinking Slider - Shown by default */}
       <div className="p-4 bg-mocha-surface0/50 border-b border-mocha-surface1">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-bold text-mocha-mauve uppercase tracking-wider">Thinking Budget</span>
-          <span className="text-3xl font-mono font-bold text-mocha-subtext1">{currentThinkingBudget.toLocaleString()} <span className="text-sm">tokens</span></span>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-mocha-mauve rounded border-mocha-surface1 bg-mocha-surface0 cursor-pointer"
+              checked={isThinkingEnabled}
+              onChange={(e) => handleToggleThinking(e.target.checked)}
+              title="Toggle Thinking Mode"
+            />
+            <span className="text-xs font-bold text-mocha-mauve uppercase tracking-wider">Thinking Budget</span>
+          </div>
+          <span className={`text-3xl font-mono font-bold transition-opacity ${isThinkingEnabled ? 'text-mocha-subtext1' : 'text-mocha-overlay0 opacity-50'}`}>
+            {currentThinkingBudget.toLocaleString()} <span className="text-sm">tokens</span>
+          </span>
         </div>
         <input
           type="range"
           min="0"
-          max="1000"
-          step="50"
-          className="w-full h-3 accent-mocha-mauve cursor-pointer"
+          max="8192"
+          step="128"
+          className={`w-full h-3 accent-mocha-mauve cursor-pointer transition-opacity ${isThinkingEnabled ? '' : 'opacity-30 pointer-events-none'}`}
           value={currentThinkingBudget}
           onChange={(e) => handleBudgetChange(parseInt(e.target.value))}
+          disabled={!isThinkingEnabled}
         />
         <div className="flex justify-between mt-2 text-xs text-mocha-overlay0 font-mono font-bold">
           <span>0</span>
-          <span>250</span>
-          <span>500</span>
-          <span>750</span>
-          <span>1K</span>
+          <span>2K</span>
+          <span>4K</span>
+          <span>6K</span>
+          <span>8K</span>
         </div>
       </div>
 
@@ -239,7 +263,15 @@ export const ModelContainer: React.FC<ModelContainerProps> = ({
             <div className="flex flex-col">
               <span>{(response.duration / 1000).toFixed(2)}s</span>
               {response.ttft !== undefined && (
-                <span className="text-sm font-black uppercase tracking-widest text-mocha-overlay0 opacity-80 mt-1">TTFT: {response.ttft}ms</span>
+                <div className="flex items-center gap-4 mt-1">
+                  <span className="text-sm font-black uppercase tracking-widest text-mocha-overlay0 opacity-80">TTFT: {response.ttft}ms</span>
+                  {response.thinkingDuration !== undefined && response.thinkingDuration > 0 && (
+                    <span className="text-sm font-black uppercase tracking-widest text-mocha-mauve opacity-80 flex items-center gap-1">
+                      <Brain className="w-3 h-3" />
+                      THINK: {(response.thinkingDuration / 1000).toFixed(2)}s
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>

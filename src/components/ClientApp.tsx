@@ -8,12 +8,12 @@ import { ChatInterface } from './ChatInterface';
 import { JokeInterface } from './JokeInterface';
 import { FunnyIndex } from './FunnyIndex';
 import { JokeWall } from './JokeWall';
-import { JokeSidebar } from './JokeSidebar';
 import { Button } from './ui/Button';
 import { Settings as SettingsIcon, LayoutGrid, MessageSquare, Zap, ArrowRight, Github, Play, HelpCircle, X, Laugh, Trophy } from 'lucide-react';
 import { saveSettingsAction, getConversationsAction, recordVisitAction } from '@/app/actions';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Users } from 'lucide-react';
+import posthog from 'posthog-js';
 
 interface ClientAppProps {
   initialModels: Model[];
@@ -210,6 +210,16 @@ export const ClientApp: React.FC<ClientAppProps> = ({
     await saveSettingsAction(newSettings);
   };
 
+  const handleViewChange = (newView: 'models' | 'chat' | 'joke' | 'funny_index') => {
+    // Track view_changed with PostHog
+    posthog.capture('view_changed', {
+      from_view: view,
+      to_view: newView,
+      selected_model_count: settings.selectedModels.length,
+    });
+    setView(newView);
+  };
+
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -221,7 +231,7 @@ export const ClientApp: React.FC<ClientAppProps> = ({
               <img src="/logo.png" alt="freellmfunny logo" className="w-full h-full object-cover" />
             </div>
             <h1 className="text-xl font-black text-mocha-text tracking-tight uppercase">
-              freellm<span className="text-mocha-blue">funny</span>
+              Free LLM Evaluator
             </h1>
           </div>
 
@@ -229,7 +239,7 @@ export const ClientApp: React.FC<ClientAppProps> = ({
             <Button
               variant={view === 'models' ? 'primary' : 'ghost'}
               size="sm"
-              onClick={() => setView('models')}
+              onClick={() => handleViewChange('models')}
               className="flex items-center gap-2"
             >
               <LayoutGrid className="w-4 h-4" />
@@ -238,7 +248,7 @@ export const ClientApp: React.FC<ClientAppProps> = ({
             <Button
               variant={view === 'chat' ? 'primary' : 'ghost'}
               size="sm"
-              onClick={() => setView('chat')}
+              onClick={() => handleViewChange('chat')}
               className="flex items-center gap-2"
             >
               <MessageSquare className="w-4 h-4" />
@@ -247,7 +257,7 @@ export const ClientApp: React.FC<ClientAppProps> = ({
             <Button
               variant={view === 'joke' ? 'primary' : 'ghost'}
               size="sm"
-              onClick={() => setView('joke')}
+              onClick={() => handleViewChange('joke')}
               className="flex items-center gap-2"
             >
               <Laugh className="w-4 h-4" />
@@ -256,11 +266,11 @@ export const ClientApp: React.FC<ClientAppProps> = ({
             <Button
               variant={view === 'funny_index' ? 'primary' : 'ghost'}
               size="sm"
-              onClick={() => setView('funny_index')}
+              onClick={() => handleViewChange('funny_index')}
               className="flex items-center gap-2"
             >
               <Trophy className="w-4 h-4" />
-              Funny Index
+              Benchmarks
             </Button>
           </div>
 
@@ -315,19 +325,12 @@ export const ClientApp: React.FC<ClientAppProps> = ({
       {/* Main Content */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* Sidebar */}
-        {view === 'joke' ? (
-          <JokeSidebar 
-            settings={settings}
-            onUpdateSettings={handleUpdateSettings}
-          />
-        ) : (
-          <JokeWall />
-        )}
+        {view === 'joke' && <JokeWall />}
 
-        <div className="flex-1 min-h-0 p-6 overflow-auto">
+        <div className="flex-1 min-h-0 p-6 overflow-hidden">
           <div className="w-full h-full flex flex-col">
             {view === 'models' ? (
-            <div className="max-w-7xl mx-auto w-full overflow-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="max-w-7xl mx-auto w-full h-full flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500">
               <ModelSelector
                 models={initialModels}
                 selectedModelIds={settings.selectedModels}
@@ -337,7 +340,7 @@ export const ClientApp: React.FC<ClientAppProps> = ({
                 <div className="mt-8 flex justify-end">
                   <Button
                     size="lg"
-                    onClick={() => setView('chat')}
+                    onClick={() => handleViewChange('chat')}
                     className="group"
                   >
                     Start Evaluation
@@ -394,6 +397,25 @@ export const ClientApp: React.FC<ClientAppProps> = ({
         onClose={() => setVideoModal({ isOpen: false, title: '' })} 
         title={videoModal.title}
       />
+
+      {/* Known Issue Notification */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-bottom-8 duration-700 delay-1000 fill-mode-both">
+        <a 
+          href="https://github.com/morrillt/free-llm-evaluator/issues/1"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 px-4 py-2.5 bg-mocha-crust/90 backdrop-blur-md border border-mocha-red/30 hover:border-mocha-red/60 rounded-full shadow-2xl transition-all hover:scale-105 group"
+        >
+          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-mocha-red/20 text-mocha-red group-hover:bg-mocha-red/30 transition-colors">
+            <Github className="w-3.5 h-3.5" />
+          </div>
+          <p className="text-xs font-bold tracking-tight text-mocha-subtext1 group-hover:text-mocha-text transition-colors flex items-center gap-2">
+            <span>known issue pls help :)</span>
+            <span className="text-mocha-red font-black uppercase tracking-widest text-[10px]">Broken Thinking Budget</span>
+          </p>
+          <div className="w-1.5 h-1.5 rounded-full bg-mocha-red animate-pulse shadow-[0_0_8px_rgba(243,139,168,0.5)]" />
+        </a>
+      </div>
     </div>
   );
 };

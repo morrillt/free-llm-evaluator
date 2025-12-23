@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { Model, ModelResponse, Settings, Message, Joke } from '@/lib/types';
 import { ModelContainer } from './ModelContainer';
+import { JokeSidebar } from './JokeSidebar';
 import { Button } from './ui/Button';
-import { Laugh, Meh, PartyPopper, Send, Trash2 } from 'lucide-react';
+import { Laugh, Meh, PartyPopper, Send, Trash2, X } from 'lucide-react';
 import { saveConversationAction, saveJokeAction } from '@/app/actions';
 import posthog from 'posthog-js';
 
@@ -26,6 +27,7 @@ export const JokeInterface: React.FC<JokeInterfaceProps> = ({
   onOpenSettings,
 }) => {
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [isRemixOpen, setIsRemixOpen] = useState(false);
   const [modelContents, setModelContents] = useState<Record<string, string>>({});
   const [modelThinkingContents, setModelThinkingContents] = useState<Record<string, string>>({});
   const [modelResponses, setModelResponses] = useState<Record<string, ModelResponse>>({});
@@ -336,80 +338,103 @@ export const JokeInterface: React.FC<JokeInterfaceProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full space-y-4 overflow-hidden">
-      <div className="bg-mocha-mantle p-4 border border-mocha-surface1 rounded-2xl shadow-xl flex items-center justify-between gap-8 flex-shrink-0">
-        <div className="flex items-center gap-8 flex-1 min-w-0">
-          <div className="flex-shrink-0">
-            <h1 className="text-mocha-pink text-xl font-black tracking-tight">
-              Testing the funniness and speed of all free models on Open Router. 
-              <span className="text-mocha-yellow ml-2">-&lt;</span>
-            </h1>
-          </div>
+    <div className="flex flex-col h-full space-y-4 overflow-hidden relative">
+      <div className="p-4 bg-mocha-mantle border border-mocha-surface1 rounded-2xl shadow-xl flex-shrink-0">
+        <div className="flex items-center justify-between gap-8">
           <div className="flex-1 min-w-0">
-            <p className="text-2xl text-mocha-lavender italic font-medium truncate">
-              "{settings.jokeSystemPrompt}"
+            <h2 className="text-xl font-black text-mocha-pink flex items-center gap-2 uppercase tracking-tighter">
+              <Laugh className="w-6 h-6" />
+              Testing the funniness and speed of all free models on Open Router.-&lt;
+            </h2>
+            <p className="text-xs text-mocha-subtext1 font-medium mt-1 uppercase tracking-widest opacity-70 flex items-center gap-1">
+              say something funny that would make larry david laugh, hint, self referetnial witty, e
+              <button 
+                onClick={() => setIsRemixOpen(true)}
+                className="text-mocha-blue hover:underline lowercase tracking-normal font-bold"
+              >
+                ... (see more)
+              </button>
             </p>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-4 flex-shrink-0">
-          <Button
-            size="lg"
-            variant="secondary"
-            onClick={onOpenSettings}
-            className="whitespace-nowrap flex items-center justify-center gap-3 bg-mocha-lavender hover:bg-mocha-lavender/90 text-mocha-base font-black px-8 py-4 text-xl rounded-full shadow-lg shadow-mocha-lavender/20 transition-transform hover:scale-105 active:scale-95"
-          >
-            <PartyPopper className="w-6 h-6" />
-            REMIX THE MAGIC
-          </Button>
-          <Button 
-            size="lg" 
-            onClick={handleTellJoke} 
-            disabled={isEvaluating || selectedModelIds.length === 0}
-            className="bg-mocha-yellow hover:bg-mocha-yellow/90 text-mocha-base font-black px-8 py-4 text-xl rounded-full shadow-lg shadow-mocha-yellow/20 whitespace-nowrap transition-transform hover:scale-105 active:scale-95"
-          >
-            {isEvaluating ? 'THINKING...' : 'GENERATE JOKES'}
-          </Button>
+          
+          <div className="flex items-center gap-4 flex-shrink-0">
+            <Button
+              size="lg"
+              variant="secondary"
+              onClick={() => setIsRemixOpen(!isRemixOpen)}
+              className="whitespace-nowrap flex items-center justify-center gap-3 bg-mocha-lavender hover:bg-mocha-lavender/90 text-mocha-base font-black px-8 py-4 text-xl rounded-full shadow-lg shadow-mocha-lavender/20 transition-transform hover:scale-105 active:scale-95"
+            >
+              <PartyPopper className="w-6 h-6" />
+              {isRemixOpen ? 'CLOSE REMIX' : 'REMIX THE MAGIC'}
+            </Button>
+            <Button 
+              size="lg" 
+              onClick={handleTellJoke} 
+              disabled={isEvaluating || selectedModelIds.length === 0}
+              className="bg-mocha-yellow hover:bg-mocha-yellow/90 text-mocha-base font-black px-8 py-4 text-xl rounded-full shadow-lg shadow-mocha-yellow/20 whitespace-nowrap transition-transform hover:scale-105 active:scale-95"
+            >
+              {isEvaluating ? 'THINKING...' : 'GENERATE JOKES'}
+            </Button>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 flex gap-4 min-h-0 overflow-x-auto p-1 pb-4">
-        {sortedModelIds.length > 0 ? (
-          sortedModelIds.map((modelId) => {
-            const model = models.find((m) => m.id === modelId);
-            const response = modelResponses[modelId];
-            const currentRating = ratings[modelId];
+      <div className="flex-1 flex gap-4 min-h-0 relative overflow-hidden">
+        <div className={`flex-1 flex gap-4 min-h-0 overflow-x-auto p-1 pb-4 transition-all duration-300 ${isRemixOpen ? 'opacity-50 pointer-events-none' : ''}`}>
+          {sortedModelIds.length > 0 ? (
+            sortedModelIds.map((modelId) => {
+              const model = models.find((m) => m.id === modelId);
+              const response = modelResponses[modelId];
+              const currentRating = ratings[modelId];
 
-            return (
-              <div key={modelId} className="flex-shrink-0 w-[400px] h-full">
-                <ModelContainer
-                  modelId={modelId}
-                  modelName={model?.name || modelId}
-                  content={modelContents[modelId] || ''}
-                  thinkingContent={modelThinkingContents[modelId] || ''}
-                  response={response}
-                  isStreaming={streamingModels.has(modelId)}
-                  onRandomize={async () => {
-                    console.log('JokeInterface: Randomizing model', modelId);
-                    const newModelId = await onRandomizeModel(modelId);
-                    console.log('JokeInterface: New model ID received:', newModelId);
-                    if (newModelId) {
-                      console.log('JokeInterface: Re-prompting with new model', newModelId);
-                      setTimeout(() => evaluateSingleJoke(newModelId), 50);
-                    }
-                  }}
-                  onRefresh={() => evaluateSingleJoke(modelId)}
-                  settings={settings}
-                  onUpdateSettings={onUpdateSettings}
-                  rating={currentRating}
-                  onRate={(rating) => handleRate(modelId, rating)}
-                />
-              </div>
-            );
-          })
-        ) : (
-          <div className="flex-1 flex items-center justify-center border-2 border-dashed border-mocha-surface1 rounded-xl text-mocha-surface2">
-            Select some models first to hear some jokes!
+              return (
+                <div key={modelId} className="flex-shrink-0 w-[400px] h-full">
+                  <ModelContainer
+                    modelId={modelId}
+                    modelName={model?.name || modelId}
+                    content={modelContents[modelId] || ''}
+                    thinkingContent={modelThinkingContents[modelId] || ''}
+                    response={response}
+                    isStreaming={streamingModels.has(modelId)}
+                    onRandomize={async () => {
+                      console.log('JokeInterface: Randomizing model', modelId);
+                      const newModelId = await onRandomizeModel(modelId);
+                      console.log('JokeInterface: New model ID received:', newModelId);
+                      if (newModelId) {
+                        console.log('JokeInterface: Re-prompting with new model', newModelId);
+                        setTimeout(() => evaluateSingleJoke(newModelId), 50);
+                      }
+                    }}
+                    onRefresh={() => evaluateSingleJoke(modelId)}
+                    settings={settings}
+                    onUpdateSettings={onUpdateSettings}
+                    rating={currentRating}
+                    onRate={(rating) => handleRate(modelId, rating)}
+                  />
+                </div>
+              );
+            })
+          ) : (
+            <div className="flex-1 flex items-center justify-center border-2 border-dashed border-mocha-surface1 rounded-xl text-mocha-surface2">
+              Select some models first to hear some jokes!
+            </div>
+          )}
+        </div>
+
+        {isRemixOpen && (
+          <div className="pointer-events-none fixed inset-y-0 right-0 z-40 w-80">
+            <div className="h-full shadow-2xl animate-in slide-in-from-right duration-300 pointer-events-auto relative">
+              <JokeSidebar 
+                settings={settings}
+                onUpdateSettings={onUpdateSettings}
+              />
+              <button 
+                onClick={() => setIsRemixOpen(false)}
+                className="absolute top-4 right-4 p-1 bg-mocha-surface0 hover:bg-mocha-surface1 text-mocha-text rounded-full shadow-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>

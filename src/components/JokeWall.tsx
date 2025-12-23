@@ -31,11 +31,22 @@ export const JokeWall: React.FC = () => {
   }, []);
 
   const handleVote = async (jokeId: string, delta: number) => {
+    const joke = jokes.find(j => j.id === jokeId);
+
+    // Track joke_wall_vote with PostHog
+    posthog.capture('joke_wall_vote', {
+      joke_id: jokeId,
+      model_signature: joke?.modelSignature,
+      vote_direction: delta > 0 ? 'upvote' : 'downvote',
+      current_score: joke?.score || 0,
+      new_score: (joke?.score || 0) + delta,
+    });
+
     // Optimistic update
-    setJokes(prev => prev.map(j => 
+    setJokes(prev => prev.map(j =>
       j.id === jokeId ? { ...j, score: (j.score || 0) + delta } : j
     ).sort((a, b) => (b.score || 0) - (a.score || 0)));
-    
+
     await voteJokeAction(jokeId, delta);
     fetchJokes(); // Refresh to sync with server
   };
@@ -44,12 +55,22 @@ export const JokeWall: React.FC = () => {
     const text = commentTexts[jokeId];
     if (!text?.trim()) return;
 
+    const joke = jokes.find(j => j.id === jokeId);
+
     const newComment: JokeComment = {
       id: Date.now().toString(),
       text: text.trim(),
       timestamp: new Date().toISOString(),
       author: 'User'
     };
+
+    // Track joke_wall_comment with PostHog
+    posthog.capture('joke_wall_comment', {
+      joke_id: jokeId,
+      model_signature: joke?.modelSignature,
+      comment_length: text.trim().length,
+      total_comments: (joke?.comments.length || 0) + 1,
+    });
 
     await addCommentAction(jokeId, newComment);
     setCommentTexts(prev => ({ ...prev, [jokeId]: '' }));

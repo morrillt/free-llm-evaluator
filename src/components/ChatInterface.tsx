@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Model, ModelResponse, Settings, Message, Joke } from '@/lib/types';
 import { ModelContainer } from './ModelContainer';
 import { Button } from './ui/Button';
-import { Send, Trash2, Download, Copy, Check } from 'lucide-react';
+import { Send, Trash2, Download, Copy, Check, MessageSquare } from 'lucide-react';
 import { saveConversationAction, saveJokeAction } from '@/app/actions';
 import posthog from 'posthog-js';
 
@@ -397,6 +397,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <div className="flex flex-col h-full space-y-4 overflow-hidden">
+      <div className="p-4 bg-mocha-mantle border border-mocha-surface1 rounded-2xl shadow-xl flex-shrink-0">
+        <h2 className="text-xl font-black text-mocha-blue flex items-center gap-2 uppercase tracking-tighter">
+          <MessageSquare className="w-6 h-6" />
+          Evaluation Lab
+        </h2>
+        <p className="text-xs text-mocha-subtext1 font-medium mt-1 uppercase tracking-widest opacity-70">
+          preliminary evaluation mechanism for a rag pipeline, more features coming soon.
+        </p>
+      </div>
+
       <div className="flex-1 flex gap-4 min-h-0 overflow-x-auto p-1 pb-4">
         {selectedModelIds.length > 0 ? (
           selectedModelIds.map((modelId) => {
