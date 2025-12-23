@@ -19,7 +19,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   selectedModelIds,
   onToggleModel,
 }) => {
-  const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [activeFilters, setActiveFilters] = useState<string[]>(FILTER_OPTIONS);
 
   const toggleFilter = (filter: string) => {
     setActiveFilters((prev) =>
@@ -73,31 +73,38 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         </div>
         
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 mr-2 text-mocha-subtext1">
-            <Filter className="w-4 h-4" />
-            <span className="text-sm font-medium whitespace-nowrap">Quick Filters:</span>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 mr-2 text-mocha-subtext1">
+              <Filter className="w-4 h-4" />
+              <span className="text-sm font-medium whitespace-nowrap">Quick Filters:</span>
+            </div>
+            {FILTER_OPTIONS.map((filter) => (
+              <Button
+                key={filter}
+                variant={activeFilters.includes(filter) ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => toggleFilter(filter)}
+                className="rounded-full px-4"
+              >
+                {filter}
+              </Button>
+            ))}
+            {activeFilters.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setActiveFilters([])}
+                className="text-mocha-red hover:text-mocha-red/80 ml-2"
+              >
+                Clear
+              </Button>
+            )}
           </div>
-          {FILTER_OPTIONS.map((filter) => (
-            <Button
-              key={filter}
-              variant={activeFilters.includes(filter) ? 'primary' : 'secondary'}
-              size="sm"
-              onClick={() => toggleFilter(filter)}
-              className="rounded-full px-4"
-            >
-              {filter}
-            </Button>
-          ))}
           {activeFilters.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setActiveFilters([])}
-              className="text-mocha-red hover:text-mocha-red/80 ml-2"
-            >
-              Clear
-            </Button>
+            <p className="text-[11px] text-mocha-subtext0 italic ml-1">
+              Just the big players are filtered, press clear to include the little guys.
+            </p>
           )}
         </div>
       </div>
@@ -109,7 +116,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         </span>
       </div>
 
-      <div className="flex-1 overflow-auto space-y-8 min-h-0 pr-2">
+      <div className="flex-1 overflow-auto space-y-8 min-h-0 pr-2 custom-scrollbar">
         {groupedModels.map(([provider, providerModels]) => (
           <div key={provider} className="space-y-3">
             <h3 className="text-sm font-bold text-mocha-overlay2 uppercase tracking-wider flex items-center gap-2">

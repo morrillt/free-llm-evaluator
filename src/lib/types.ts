@@ -45,8 +45,11 @@ export interface ModelResponse {
   ttft?: number; // Time to first token in ms
   thinkingDuration?: number; // in ms
   tps: number;
-  tokenCount: number;
+  tokenCount: number; // mapping to completionTokens for backwards compatibility if needed, but we'll use specific fields
+  promptTokens?: number;
+  completionTokens?: number;
   thinkingTokenCount?: number;
+  cost?: number;
   error?: string;
   rawResponse?: any;
   rating?: 'funny' | 'not_funny';

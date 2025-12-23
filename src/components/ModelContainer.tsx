@@ -155,7 +155,7 @@ export const ModelContainer: React.FC<ModelContainerProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 custom-scrollbar">
         {(thinkingContent || response?.thinkingContent) && (
           <div className="border-b border-mocha-surface1">
             <button
@@ -280,9 +280,21 @@ export const ModelContainer: React.FC<ModelContainerProps> = ({
             <span>{response.tps} TPS</span>
           </div>
           <div className="flex items-center gap-3">
-            <Hash className="w-8 h-8 text-mocha-green" />
-            <span>{response.tokenCount} chars</span>
+            <Brain className="w-8 h-8 text-mocha-green" />
+            <div className="flex flex-col">
+              <span className="leading-none">iTokens</span>
+              <div className="flex gap-3 mt-1">
+                <span className="text-sm font-black uppercase tracking-widest text-mocha-overlay0 opacity-80">IN: {response.promptTokens || '-'}</span>
+                <span className="text-sm font-black uppercase tracking-widest text-mocha-green opacity-80">OUT: {response.completionTokens || response.tokenCount}</span>
+              </div>
+            </div>
           </div>
+          {response.cost !== undefined && (
+            <div className="flex items-center gap-3">
+              <span className="text-mocha-lavender font-mono">$</span>
+              <span>{response.cost.toFixed(6)}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

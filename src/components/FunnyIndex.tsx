@@ -9,7 +9,7 @@ interface FunnyIndexProps {
   conversations: Conversation[];
 }
 
-type SortField = 'name' | 'runs' | 'avgDuration' | 'avgTTFT' | 'avgThinkingTime' | 'avgTPS' | 'funnyScore';
+type SortField = 'name' | 'runs' | 'avgDuration' | 'avgTTFT' | 'avgThinkingTime' | 'avgTPS' | 'funnyScore' | 'avgCost';
 type SortOrder = 'asc' | 'desc';
 type DashboardMode = 'serious' | 'funny';
 
@@ -26,6 +26,7 @@ export const FunnyIndex: React.FC<FunnyIndexProps> = ({ models, conversations })
       totalTTFT: number;
       totalThinkingDuration: number;
       totalTPS: number;
+      totalCost: number;
       runs: number;
     }> = {};
 
@@ -41,6 +42,7 @@ export const FunnyIndex: React.FC<FunnyIndexProps> = ({ models, conversations })
             totalTTFT: 0,
             totalThinkingDuration: 0,
             totalTPS: 0,
+            totalCost: 0,
             runs: 0
           };
         }
@@ -49,6 +51,7 @@ export const FunnyIndex: React.FC<FunnyIndexProps> = ({ models, conversations })
         modelStats[modelId].totalTTFT += response.ttft || 0;
         modelStats[modelId].totalThinkingDuration += response.thinkingDuration || 0;
         modelStats[modelId].totalTPS += response.tps || 0;
+        modelStats[modelId].totalCost += response.cost || 0;
 
         if (response.rating === 'funny') {
           modelStats[modelId].funny += 1;
@@ -73,6 +76,7 @@ export const FunnyIndex: React.FC<FunnyIndexProps> = ({ models, conversations })
           avgTTFT: stat.totalTTFT / stat.runs,
           avgThinkingTime: stat.totalThinkingDuration / stat.runs,
           avgTPS: stat.totalTPS / stat.runs,
+          avgCost: stat.totalCost / stat.runs,
           runs: stat.runs,
         };
       })
@@ -174,6 +178,7 @@ export const FunnyIndex: React.FC<FunnyIndexProps> = ({ models, conversations })
                 <SortHeader field="avgTTFT" label="Avg TTFT" icon={Timer} />
                 <SortHeader field="avgThinkingTime" label="Avg Thinking" icon={Activity} />
                 <SortHeader field="avgTPS" label="Avg TPS" icon={Zap} />
+                <SortHeader field="avgCost" label="Avg Cost" icon={Timer} />
                 {mode === 'funny' && <SortHeader field="funnyScore" label="Funny Score" icon={Laugh} />}
               </tr>
             </thead>
@@ -231,6 +236,14 @@ export const FunnyIndex: React.FC<FunnyIndexProps> = ({ models, conversations })
                           {stat.avgTPS.toFixed(1)}
                         </span>
                         <span className="text-[10px] text-mocha-overlay0 uppercase font-black">tok/s</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex flex-col">
+                        <span className="font-mono font-bold text-mocha-lavender">
+                          ${stat.avgCost.toFixed(6)}
+                        </span>
+                        <span className="text-[10px] text-mocha-overlay0 uppercase font-black">avg cost</span>
                       </div>
                     </td>
                     {mode === 'funny' && (

@@ -26,7 +26,7 @@ export const JokeSidebar: React.FC<JokeSidebarProps> = ({ settings, onUpdateSett
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-6 py-2">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-6 py-2 custom-scrollbar">
         <section>
           <label className="block text-sm font-medium text-mocha-subtext1 mb-2">
             Joke Prompt

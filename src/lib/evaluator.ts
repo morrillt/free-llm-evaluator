@@ -10,9 +10,12 @@ export interface StreamChunk {
     duration: number;
     ttft?: number;
     tokenCount: number;
+    promptTokens?: number;
+    completionTokens?: number;
     thinkingDuration?: number;
     thinkingTokenCount?: number;
     tps: number;
+    cost?: number;
   };
 }
 
@@ -46,6 +49,9 @@ export async function* evaluateModelStream(
   let thinkingCharCount = 0;
   let fullContent = '';
   let fullThinkingContent = '';
+  let totalCost = 0;
+  let finalPromptTokens = 0;
+  let finalCompletionTokens = 0;
 
   const body: any = {
     model: modelId,
@@ -194,6 +200,11 @@ export async function* evaluateModelStream(
             // If we have usage in the chunk (OpenRouter sends it at the end)
             if (data.usage) {
               tokenCount = data.usage.completion_tokens || tokenCount;
+              finalPromptTokens = data.usage.prompt_tokens || finalPromptTokens;
+              finalCompletionTokens = data.usage.completion_tokens || finalCompletionTokens;
+              if (data.usage.total_cost !== undefined) {
+                totalCost = data.usage.total_cost;
+              }
             }
           } catch (e) {
             console.error('Error parsing stream chunk', e);
@@ -218,9 +229,12 @@ export async function* evaluateModelStream(
         duration,
         ttft,
         tokenCount: charCount, // UI uses this as chars usually
+        promptTokens: finalPromptTokens,
+        completionTokens: finalCompletionTokens,
         thinkingDuration,
         thinkingTokenCount,
         tps: parseFloat(tps.toFixed(2)),
+        cost: totalCost,
       },
     };
   } catch (error: any) {

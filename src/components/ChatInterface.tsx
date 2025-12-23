@@ -4,14 +4,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Model, ModelResponse, Settings, Message, Joke } from '@/lib/types';
 import { ModelContainer } from './ModelContainer';
 import { Button } from './ui/Button';
-import { Send, Trash2, Download, Copy, Check, MessageSquare } from 'lucide-react';
+import { Send, Trash2, Download, Copy, Check, MessageSquare, LayoutGrid, Table as TableIcon, ArrowUpDown, ChevronUp, ChevronDown, X } from 'lucide-react';
 import { saveConversationAction, saveJokeAction } from '@/app/actions';
 import posthog from 'posthog-js';
+
+type ViewMode = 'grid' | 'table';
+type SortConfig = { key: keyof ModelResponse | 'name'; direction: 'asc' | 'desc' };
 
 interface ChatInterfaceProps {
   models: Model[];
   selectedModelIds: string[];
   settings: Settings;
+  initialPrompt?: string;
+  onPromptChange?: (prompt: string) => void;
   onRandomizeModel: (oldModelId: string) => Promise<string | null>;
   onUpdateSettings: (settings: Settings) => void;
 }
@@ -20,18 +25,76 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   models,
   selectedModelIds,
   settings,
+  initialPrompt = '',
+  onPromptChange,
   onRandomizeModel,
   onUpdateSettings,
 }) => {
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState(initialPrompt);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [modelContents, setModelContents] = useState<Record<string, string>>({});
   const [modelThinkingContents, setModelThinkingContents] = useState<Record<string, string>>({});
   const [modelResponses, setModelResponses] = useState<Record<string, ModelResponse>>({});
   const [streamingModels, setStreamingModels] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'duration', direction: 'asc' });
+
+  useEffect(() => {
+    if (initialPrompt && !prompt) {
+      setPrompt(initialPrompt);
+    }
+  }, [initialPrompt]);
 
   const selectedModels = models.filter((m) => selectedModelIds.includes(m.id));
+
+  const sortedModelIds = [...selectedModelIds].sort((a, b) => {
+    const resA = modelResponses[a];
+    const resB = modelResponses[b];
+    const modelA = models.find(m => m.id === a);
+    const modelB = models.find(m => m.id === b);
+
+    let valA: any;
+    let valB: any;
+
+    if (sortConfig.key === 'name') {
+      valA = modelA?.name || a;
+      valB = modelB?.name || b;
+    } else {
+      valA = resA ? resA[sortConfig.key] : Infinity;
+      valB = resB ? resB[sortConfig.key] : Infinity;
+    }
+
+    if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const handleSort = (key: keyof ModelResponse | 'name') => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const removeModelResponse = (modelId: string) => {
+    setModelContents(prev => {
+      const next = { ...prev };
+      delete next[modelId];
+      return next;
+    });
+    setModelThinkingContents(prev => {
+      const next = { ...prev };
+      delete next[modelId];
+      return next;
+    });
+    setModelResponses(prev => {
+      const next = { ...prev };
+      delete next[modelId];
+      return next;
+    });
+    posthog.capture('model_result_removed', { model_id: modelId });
+  };
 
   const evaluateSingleModel = async (modelId: string, currentPrompt: string) => {
     if (!currentPrompt.trim()) return;
@@ -181,7 +244,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             content: response.content,
             modelSignature: model?.name || modelId,
             timestamp: new Date().toISOString(),
-            comments: []
+            comments: [],
+            score: 0
           };
           await saveJokeAction(joke);
         }
@@ -397,45 +461,199 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <div className="flex flex-col h-full space-y-4 overflow-hidden">
-      <div className="p-4 bg-mocha-mantle border border-mocha-surface1 rounded-2xl shadow-xl flex-shrink-0">
-        <h2 className="text-xl font-black text-mocha-blue flex items-center gap-2 uppercase tracking-tighter">
-          <MessageSquare className="w-6 h-6" />
-          Evaluation Lab
-        </h2>
-        <p className="text-xs text-mocha-subtext1 font-medium mt-1 uppercase tracking-widest opacity-70">
-          preliminary evaluation mechanism for a rag pipeline, more features coming soon.
-        </p>
+      <div className="p-4 bg-mocha-mantle border border-mocha-surface1 rounded-2xl shadow-xl flex-shrink-0 flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-black text-mocha-blue flex items-center gap-2 uppercase tracking-tighter">
+            <MessageSquare className="w-6 h-6" />
+            Evaluation Lab
+          </h2>
+          <p className="text-xs text-mocha-subtext1 font-medium mt-1 uppercase tracking-widest opacity-70">
+            preliminary evaluation mechanism for a rag pipeline, more features coming soon.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant={viewMode === 'grid' ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => setViewMode('grid')}
+            title="Grid View"
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'table' ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => setViewMode('table')}
+            title="Table View"
+          >
+            <TableIcon className="w-4 h-4 mr-2" />
+            Table Toggle
+          </Button>
+        </div>
       </div>
 
-      <div className="flex-1 flex gap-4 min-h-0 overflow-x-auto p-1 pb-4">
+      <div className="flex-1 min-h-0 overflow-auto p-1 pb-4 custom-scrollbar">
         {selectedModelIds.length > 0 ? (
-          selectedModelIds.map((modelId) => {
-            const model = models.find((m) => m.id === modelId);
-            return (
-              <div key={modelId} className="flex-shrink-0 w-[400px] h-full">
-                <ModelContainer
-                  modelId={modelId}
-                  modelName={model?.name || modelId}
-                  content={modelContents[modelId] || ''}
-                  thinkingContent={modelThinkingContents[modelId] || ''}
-                  response={modelResponses[modelId]}
-                  isStreaming={streamingModels.has(modelId)}
-                  onRandomize={async () => {
-                    console.log('ChatInterface: Randomizing model', modelId);
-                    const newModelId = await onRandomizeModel(modelId);
-                    console.log('ChatInterface: New model ID received:', newModelId);
-                    if (newModelId && prompt.trim()) {
-                      console.log('ChatInterface: Re-prompting with new model', newModelId);
-                      setTimeout(() => evaluateSingleModel(newModelId, prompt), 50);
-                    }
-                  }}
-                  onRefresh={() => evaluateSingleModel(modelId, prompt)}
-                  settings={settings}
-                  onUpdateSettings={onUpdateSettings}
-                />
+          viewMode === 'grid' ? (
+            <div className="flex gap-4 h-full overflow-x-auto custom-scrollbar">
+              {selectedModelIds.map((modelId) => {
+                const model = models.find((m) => m.id === modelId);
+                return (
+                  <div key={modelId} className="flex-shrink-0 w-[400px] h-full">
+                    <ModelContainer
+                      modelId={modelId}
+                      modelName={model?.name || modelId}
+                      content={modelContents[modelId] || ''}
+                      thinkingContent={modelThinkingContents[modelId] || ''}
+                      response={modelResponses[modelId]}
+                      isStreaming={streamingModels.has(modelId)}
+                      onRandomize={async () => {
+                        console.log('ChatInterface: Randomizing model', modelId);
+                        const newModelId = await onRandomizeModel(modelId);
+                        console.log('ChatInterface: New model ID received:', newModelId);
+                        if (newModelId && prompt.trim()) {
+                          console.log('ChatInterface: Re-prompting with new model', newModelId);
+                          setTimeout(() => evaluateSingleModel(newModelId, prompt), 50);
+                        }
+                      }}
+                      onRefresh={() => evaluateSingleModel(modelId, prompt)}
+                      settings={settings}
+                      onUpdateSettings={onUpdateSettings}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-mocha-mantle border border-mocha-surface1 rounded-xl overflow-hidden h-full flex flex-col">
+              <div className="overflow-auto flex-1 custom-scrollbar">
+                <table className="w-full text-left border-collapse">
+                  <thead className="sticky top-0 bg-mocha-surface0 z-10">
+                    <tr className="border-b border-mocha-surface1">
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider cursor-pointer hover:text-mocha-blue" onClick={() => handleSort('name')}>
+                        <div className="flex items-center gap-1">
+                          Model {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </div>
+                      </th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider">Prompt</th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider">Thinking</th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider">Budget</th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider cursor-pointer hover:text-mocha-blue" onClick={() => handleSort('ttft')}>
+                        <div className="flex items-center gap-1">
+                          TTFT {sortConfig.key === 'ttft' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </div>
+                      </th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider cursor-pointer hover:text-mocha-blue" onClick={() => handleSort('thinkingDuration')}>
+                        <div className="flex items-center gap-1">
+                          Thinking Time {sortConfig.key === 'thinkingDuration' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </div>
+                      </th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider cursor-pointer hover:text-mocha-blue" onClick={() => handleSort('duration')}>
+                        <div className="flex items-center gap-1">
+                          Total Time {sortConfig.key === 'duration' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </div>
+                      </th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider cursor-pointer hover:text-mocha-blue" onClick={() => handleSort('tps')}>
+                        <div className="flex items-center gap-1">
+                          TPS {sortConfig.key === 'tps' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </div>
+                      </th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider cursor-pointer hover:text-mocha-blue" onClick={() => handleSort('tokenCount')}>
+                        <div className="flex items-center gap-1">
+                          iTokens {sortConfig.key === 'tokenCount' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </div>
+                        <div className="flex gap-2 mt-1 text-[9px] font-black opacity-40 tracking-tighter">
+                          <span>IN</span>
+                          <span className="opacity-30">/</span>
+                          <span>OUT</span>
+                        </div>
+                      </th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider cursor-pointer hover:text-mocha-blue" onClick={() => handleSort('cost')}>
+                        <div className="flex items-center gap-1">
+                          Cost {sortConfig.key === 'cost' && (sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                        </div>
+                      </th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider">Content</th>
+                      <th className="p-4 text-xs font-bold text-mocha-overlay2 uppercase tracking-wider text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-mocha-surface1">
+                    {sortedModelIds.map((modelId) => {
+                      const model = models.find(m => m.id === modelId);
+                      const response = modelResponses[modelId];
+                      const content = modelContents[modelId] || '';
+                      const override = settings.modelOverrides[modelId] || {};
+                      const thinkingEnabled = override.thinkingEnabled ?? settings.globalThinkingEnabled;
+                      const thinkingBudget = override.thinkingBudget ?? settings.globalThinkingBudget;
+                      
+                      return (
+                        <tr key={modelId} className="hover:bg-mocha-surface0/50 transition-colors">
+                          <td className="p-4">
+                            <div className="font-bold text-mocha-text">{model?.name || modelId}</div>
+                            <div className="text-[10px] text-mocha-subtext0 font-mono opacity-60">{modelId}</div>
+                          </td>
+                          <td className="p-4 text-mocha-text max-w-[150px]">
+                            <div className="text-xs truncate opacity-70" title={prompt}>
+                              {prompt || '-'}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <span className={cn(
+                              "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase",
+                              thinkingEnabled ? "bg-mocha-green/20 text-mocha-green" : "bg-mocha-red/20 text-mocha-red"
+                            )}>
+                              {thinkingEnabled ? 'On' : 'Off'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-mocha-text font-mono text-xs">
+                            {thinkingBudget}
+                          </td>
+                          <td className="p-4 text-mocha-text">
+                            {response?.ttft ? `${response.ttft}ms` : (streamingModels.has(modelId) ? '...' : '-')}
+                          </td>
+                          <td className="p-4 text-mocha-text">
+                            {response?.thinkingDuration ? `${response.thinkingDuration}ms` : (streamingModels.has(modelId) ? '...' : '-')}
+                          </td>
+                          <td className="p-4 text-mocha-text">
+                            {response?.duration ? `${(response.duration / 1000).toFixed(2)}s` : (streamingModels.has(modelId) ? '...' : '-')}
+                          </td>
+                          <td className="p-4 text-mocha-text">
+                            {response?.tps ? `${response.tps.toFixed(1)}` : (streamingModels.has(modelId) ? '...' : '-')}
+                          </td>
+                          <td className="p-4 text-mocha-text">
+                            <div className="flex flex-col">
+                              <div className="text-xs font-mono">
+                                {response?.promptTokens || '-'}<span className="mx-1 opacity-30">/</span>{response?.completionTokens || (content.length > 0 ? Math.ceil(content.length / 3.5) : '-')}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4 text-mocha-text font-mono text-[10px]">
+                            {response?.cost !== undefined ? `$${response.cost.toFixed(6)}` : (streamingModels.has(modelId) ? '...' : '-')}
+                          </td>
+                          <td className="p-4">
+                            <div className="text-sm text-mocha-subtext1 line-clamp-2 max-w-md">
+                              {content || (response?.error ? <span className="text-mocha-red">{response.error}</span> : '-')}
+                            </div>
+                          </td>
+                          <td className="p-4 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeModelResponse(modelId)}
+                              className="text-mocha-overlay0 hover:text-mocha-red h-8 w-8 p-0"
+                              title="Remove from log"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            );
-          })
+            </div>
+          )
         ) : (
           <div className="flex-1 flex items-center justify-center border-2 border-dashed border-mocha-surface1 rounded-xl text-mocha-surface2">
             Select up to 7 models to start evaluation
@@ -449,7 +667,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             className="flex-1 bg-mocha-surface0 border border-mocha-surface1 rounded-lg p-4 text-mocha-text focus:outline-none focus:ring-2 focus:ring-mocha-blue resize-none h-24"
             placeholder="Enter your prompt here..."
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            onChange={(e) => {
+              setPrompt(e.target.value);
+              onPromptChange?.(e.target.value);
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -476,6 +697,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               size="sm"
               onClick={() => {
                 setPrompt('');
+                onPromptChange?.('');
                 setModelContents({});
                 setModelResponses({});
               }}
@@ -511,5 +733,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     </div>
   );
 };
+
+function cn(...inputs: any[]) {
+  return inputs.filter(Boolean).join(' ');
+}
 
 

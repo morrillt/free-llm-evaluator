@@ -34,6 +34,7 @@ export const JokeInterface: React.FC<JokeInterfaceProps> = ({
   const [streamingModels, setStreamingModels] = useState<Set<string>>(new Set());
   const [ratings, setRatings] = useState<Record<string, 'funny' | 'not_funny'>>({});
   const [completedModels, setCompletedModels] = useState<Set<string>>(new Set());
+  const [hasAutoStarted, setHasAutoStarted] = useState(false);
 
   const selectedModels = models.filter((m) => selectedModelIds.includes(m.id));
 
@@ -165,7 +166,7 @@ export const JokeInterface: React.FC<JokeInterfaceProps> = ({
     }
   };
 
-  const handleTellJoke = async () => {
+  const handleTellJoke = React.useCallback(async () => {
     if (isEvaluating || selectedModelIds.length === 0) return;
 
     setIsEvaluating(true);
@@ -291,7 +292,15 @@ export const JokeInterface: React.FC<JokeInterfaceProps> = ({
 
     await Promise.all(evalPromises);
     setIsEvaluating(false);
-  };
+  }, [isEvaluating, selectedModelIds, settings, models]);
+
+  // Auto-trigger joke generation on mount
+  useEffect(() => {
+    if (selectedModelIds.length > 0 && !isEvaluating && !hasAutoStarted) {
+      handleTellJoke();
+      setHasAutoStarted(true);
+    }
+  }, [selectedModelIds.length, isEvaluating, hasAutoStarted, handleTellJoke]);
 
   const handleRate = async (modelId: string, rating: 'funny' | 'not_funny') => {
     const response = modelResponses[modelId];
@@ -321,7 +330,8 @@ export const JokeInterface: React.FC<JokeInterfaceProps> = ({
         content: response.content,
         modelSignature: model?.name || modelId,
         timestamp: new Date().toISOString(),
-        comments: []
+        comments: [],
+        score: 0
       };
       await saveJokeAction(joke);
     }
@@ -380,7 +390,7 @@ export const JokeInterface: React.FC<JokeInterfaceProps> = ({
       </div>
 
       <div className="flex-1 flex gap-4 min-h-0 relative overflow-hidden">
-        <div className={`flex-1 flex gap-4 min-h-0 overflow-x-auto p-1 pb-4 transition-all duration-300 ${isRemixOpen ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`flex-1 flex gap-4 min-h-0 overflow-x-auto p-1 pb-4 transition-all duration-300 custom-scrollbar ${isRemixOpen ? 'opacity-50 pointer-events-none' : ''}`}>
           {sortedModelIds.length > 0 ? (
             sortedModelIds.map((modelId) => {
               const model = models.find((m) => m.id === modelId);
