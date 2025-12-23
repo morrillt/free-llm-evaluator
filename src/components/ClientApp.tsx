@@ -67,13 +67,14 @@ export const ClientApp: React.FC<ClientAppProps> = ({
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
-  const [view, setView] = useState<'models' | 'chat' | 'joke' | 'funny_index'>('models');
+  const [view, setView] = useState<'models' | 'chat' | 'joke' | 'funny_index'>('chat');
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [videoModal, setVideoModal] = useState<{ isOpen: boolean; title: string }>({ isOpen: false, title: '' });
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [visitorCount, setVisitorCount] = useState<number>(0);
+  const [visitorCount, setVisitorCount] = useState<number | null>(null);
+  const [currentPrompt, setCurrentPrompt] = useState('how much wood could a woodchuck chuck if a wood chuck could chuck  wood?');
 
   // Record visit and get count
   useEffect(() => {
@@ -118,6 +119,7 @@ export const ClientApp: React.FC<ClientAppProps> = ({
     const m = searchParams.get('models');
     const t = searchParams.get('thinking');
     const j = searchParams.get('joke');
+    const p = searchParams.get('prompt');
 
     let updatedSettings = { ...settings };
     let needsUpdate = false;
@@ -142,6 +144,10 @@ export const ClientApp: React.FC<ClientAppProps> = ({
       needsUpdate = true;
     }
 
+    if (p) {
+      setCurrentPrompt(p);
+    }
+
     if (needsUpdate) {
       setSettings(updatedSettings);
     }
@@ -161,6 +167,7 @@ export const ClientApp: React.FC<ClientAppProps> = ({
     if (thinkingStr) params.set('thinking', thinkingStr);
     
     if (settings.jokeSystemPrompt) params.set('joke', settings.jokeSystemPrompt);
+    if (currentPrompt) params.set('prompt', currentPrompt);
 
     const queryString = params.toString();
     const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
@@ -277,7 +284,7 @@ export const ClientApp: React.FC<ClientAppProps> = ({
           <div className="flex items-center gap-2 px-3 py-1.5 bg-mocha-surface0/50 rounded-lg border border-mocha-surface1/50 text-mocha-subtext0">
             <Users className="w-4 h-4 text-mocha-blue" />
             <span className="text-sm font-bold font-mono">
-              {visitorCount || '...'}
+              {visitorCount === null ? '...' : visitorCount.toLocaleString()}
             </span>
           </div>
         </div>
@@ -355,6 +362,8 @@ export const ClientApp: React.FC<ClientAppProps> = ({
                 models={initialModels}
                 selectedModelIds={settings.selectedModels}
                 settings={settings}
+                initialPrompt={currentPrompt}
+                onPromptChange={setCurrentPrompt}
                 onRandomizeModel={handleRandomizeModel}
                 onUpdateSettings={handleUpdateSettings}
               />

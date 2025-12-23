@@ -9,13 +9,31 @@ const JOKES_FILE = path.join(DATA_DIR, 'jokes.json');
 const VISITORS_FILE = path.join(DATA_DIR, 'visitors.json');
 
 const DEFAULT_SETTINGS: Settings = {
-  selectedModels: [],
+  selectedModels: [
+    'nousresearch/hermes-3-llama-3.1-405b:free',
+    'nvidia/nemotron-nano-9b-v2:free',
+    'nvidia/nemotron-3-nano-30b-a3b:free',
+    'tngtech/deepseek-r1t2-chimera:free',
+    'tngtech/deepseek-r1t-chimera:free',
+    'google/gemma-3-27b-it:free',
+    'qwen/qwen3-coder:free'
+  ],
   globalSystemPrompt: 'You are a helpful assistant.',
   globalTemperature: 0.7,
   globalThinkingEnabled: true,
   globalThinkingBudget: 2048,
-  jokeSystemPrompt: "You are Larry David. You are curmudgeonly, skeptical, and easily annoyed. Tell a short joke about a social convention that makes no sense to you. Be neurotic and observational. Start immediately with the joke.",
-  modelOverrides: {},
+  jokeSystemPrompt: "say something funny that would make larry david laugh, hint, self referetnial witty, etc... no fart jokes.\n\nJust the joke, no warm up no referneces, joke only. DO NOT LOOKUP ON JOKE SITES! MAKE IT UP\n\n\n",
+  modelOverrides: {
+    'z-ai/glm-4.5-air:free': { thinkingEnabled: true, thinkingBudget: 100 },
+    'qwen/qwen3-coder:free': { thinkingEnabled: true, thinkingBudget: 100 },
+    'nvidia/nemotron-3-nano-30b-a3b:free': { thinkingEnabled: true, thinkingBudget: 100 },
+    'tngtech/deepseek-r1t2-chimera:free': { thinkingEnabled: true, thinkingBudget: 100 },
+    'meta-llama/llama-3.3-70b-instruct:free': { thinkingEnabled: true, thinkingBudget: 100 },
+    'google/gemma-3-27b-it:free': { thinkingEnabled: true, thinkingBudget: 100 },
+    'deepseek/deepseek-r1-0528:free': { thinkingEnabled: true, thinkingBudget: 100 },
+    'google/gemini-2.0-flash-exp:free': { thinkingEnabled: true, thinkingBudget: 100 },
+    'nvidia/nemotron-nano-9b-v2:free': { thinkingEnabled: true, thinkingBudget: 100 },
+  },
 };
 
 async function ensureDataDir() {
@@ -27,19 +45,14 @@ async function ensureDataDir() {
 }
 
 export async function getSettings(): Promise<Settings> {
-  await ensureDataDir();
-  try {
-    const data = await fs.readFile(SETTINGS_FILE, 'utf-8');
-    const parsed = JSON.parse(data);
-    return { ...DEFAULT_SETTINGS, ...parsed };
-  } catch (error) {
-    return DEFAULT_SETTINGS;
-  }
+  // We no longer persist settings to a file on localhost/dev
+  // Settings are primarily managed via URL params now
+  return DEFAULT_SETTINGS;
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
-  await ensureDataDir();
-  await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  // We no longer persist settings to a file
+  // The ClientApp handles syncing settings to the URL
 }
 
 export async function getConversations(): Promise<Conversation[]> {
@@ -88,33 +101,44 @@ export async function updateJokes(jokes: Joke[]): Promise<void> {
 }
 
 export async function getVisitorCount(): Promise<number> {
-  await ensureDataDir();
   try {
+    await ensureDataDir();
     const data = await fs.readFile(VISITORS_FILE, 'utf-8');
     const visitors = JSON.parse(data);
     return Array.isArray(visitors) ? visitors.length : 0;
   } catch (error) {
-    return 0;
+    // If we can't read from file (e.g. on Vercel), return a fallback
+    return 1337; 
   }
 }
 
 export async function recordVisit(ip: string): Promise<number> {
-  await ensureDataDir();
-  let visitors: string[] = [];
   try {
-    const data = await fs.readFile(VISITORS_FILE, 'utf-8');
-    visitors = JSON.parse(data);
-    if (!Array.isArray(visitors)) visitors = [];
-  } catch (error) {
-    visitors = [];
-  }
+    await ensureDataDir();
+    let visitors: string[] = [];
+    try {
+      const data = await fs.readFile(VISITORS_FILE, 'utf-8');
+      visitors = JSON.parse(data);
+      if (!Array.isArray(visitors)) visitors = [];
+    } catch (error) {
+      visitors = [];
+    }
 
-  if (!visitors.includes(ip)) {
-    visitors.push(ip);
-    await fs.writeFile(VISITORS_FILE, JSON.stringify(visitors, null, 2));
+    if (!visitors.includes(ip)) {
+      visitors.push(ip);
+      try {
+        await fs.writeFile(VISITORS_FILE, JSON.stringify(visitors, null, 2));
+      } catch (e) {
+        // Fail silently on Vercel, we'll just return the current length
+        console.warn('Could not write visitors to file system, using memory fallback');
+      }
+    }
+    
+    return visitors.length > 0 ? visitors.length : 1337;
+  } catch (e) {
+    // Fallback for Vercel where fs might be totally disabled or fail
+    return 1337;
   }
-  
-  return visitors.length;
 }
 
 
