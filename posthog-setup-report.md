@@ -1,3 +1,31 @@
+---
+title: PostHog Integration Report
+facets:
+  type: note
+  status: active
+  summary:
+    human: >-
+      Completed PostHog integration with client/server-side tracking, error
+      handling, and environment configuration for an AI evaluation platform.
+    vector: >-
+      PostHog integration report covering full-stack implementation including
+      client-side instrumentation via posthog-js, server-side tracking with
+      posthog-node, Next.js reverse proxy configuration, error capture, and
+      environment variables. Details nine custom events: model_selected,
+      model_deselected, evaluation_started, evaluation_completed,
+      results_exported, joke_generation_started, joke_rated, model_randomized,
+      joke_wall_vote. Events track AI model interactions, evaluation workflows,
+      joke features, and user engagement patterns for an AI evaluation platform.
+tags:
+  - PostHog
+  - analytics
+  - Next.js
+  - tracking
+  - implementation
+  - events
+  - client-side
+  - server-side
+---
 # PostHog post-wizard report
 
 The wizard has completed a deep integration of your project. PostHog has been configured with client-side event tracking using `posthog-js` and server-side tracking using `posthog-node`. The integration includes:

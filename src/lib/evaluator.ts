@@ -199,6 +199,7 @@ export async function* evaluateModelStream(
             
             // If we have usage in the chunk (OpenRouter sends it at the end)
             if (data.usage) {
+              console.log(`[EVALUATOR] Usage for ${modelId}:`, JSON.stringify(data.usage));
               tokenCount = data.usage.completion_tokens || tokenCount;
               finalPromptTokens = data.usage.prompt_tokens || finalPromptTokens;
               finalCompletionTokens = data.usage.completion_tokens || finalCompletionTokens;

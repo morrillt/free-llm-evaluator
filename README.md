@@ -1,3 +1,36 @@
+---
+title: Free LLM Evaluator - Next.js App for LLM Comparison
+facets:
+  type: note
+  status: active
+  summary:
+    human: >-
+      A Next.js application that evaluates and compares free LLM models via
+      OpenRouter with real-time streaming, performance metrics, and persistent
+      data.
+    vector: >-
+      Next.js 15+ application for benchmarking free OpenRouter LLM models.
+      Features include multi-model parallel comparison, real-time response
+      streaming, performance profiling (TPS, duration, response size),
+      Catppuccin-themed UI, persistent settings, smart data policy detection,
+      and provider filtering. Built with Tailwind CSS and Lucide React, designed
+      via dual-format PRD approach (MD/XML). Compares open-source models against
+      Gemini 3 Flash.
+tags:
+  - Next.js
+  - OpenRouter
+  - LLM
+  - Model Comparison
+  - Streaming
+  - Performance Profiling
+  - Catppuccin
+  - Persistence
+  - Gemini 3 Flash
+  - AI Optimized
+  - PRD
+  - BMAD
+  - Tech Stack
+---
 # freellmfunny
 
 A standalone Next.js application designed to evaluate and compare multiple free LLM models available via [OpenRouter](https://openrouter.ai/). 
